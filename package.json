@@ -24,6 +24,14 @@
       "types": "./dist/server/index.d.ts",
       "import": "./dist/server/index.js"
     },
+    "./server/schema": {
+      "types": "./dist/server/schema.d.ts",
+      "import": "./dist/server/schema.js"
+    },
+    "./schema": {
+      "types": "./dist/schema/index.d.ts",
+      "import": "./dist/schema/index.js"
+    },
     "./server/files": {
       "types": "./dist/server/files.d.ts",
       "import": "./dist/server/files.js"

@@ -10,6 +10,25 @@ export type LandingSection = AnyRecord & {
   data?: unknown;
 };
 
+export type SectionSchemaSlotType = 'content' | 'gallery' | 'section' | 'sectionGroup';
+
+export type SectionSchemaSlot = {
+  type: SectionSchemaSlotType;
+  order: number;
+  many?: boolean;
+};
+
+export type SectionSchema = {
+  code: string;
+  info?: {
+    name?: string;
+    description?: string;
+  };
+  data: Record<string, SectionSchemaSlot>;
+};
+
+export type SectionSchemaRegistry = Record<string, SectionSchema>;
+
 export type SectionDataLoader<TSection extends LandingSection = LandingSection> = (
   section: TSection,
   context?: AnyRecord,
@@ -162,7 +181,7 @@ export type LandingFrameworkConfig = {
   prisma: any;
   getLocale: () => string;
   modelConfigs?: ModelConfigRegistry;
-  sectionLoaders?: SectionLoaderRegistry;
+  sectionSchemas?: SectionSchemaRegistry;
   auth?: {
     hydrateRequestAuth?: (event: any) => Promise<void>;
     requireAuthenticatedUser?: (locals: any) => unknown;

@@ -1,17 +1,18 @@
-import type { LandingFrameworkConfig, LandingSection, SectionLoaderRegistry } from '../types/index.js';
+import type { LandingFrameworkConfig } from '../types/index.js';
+export { readSectionSchemas, createSectionSchemaManager } from './schema.js';
 export { reorderEntries } from '../utils/reorder.js';
 export type { ReorderEntriesOptions } from '../utils/reorder.js';
 export type LandingPageLoadConfig = Pick<LandingFrameworkConfig, 'prisma' | 'getLocale'> & {
-    sectionLoaders?: SectionLoaderRegistry;
+    sectionSchemas?: LandingFrameworkConfig['sectionSchemas'];
 };
 export declare function createLandingPageLoad(config: LandingPageLoadConfig): ({ url }: {
     url: URL;
 }) => Promise<{
-    sections: (LandingSection | {
-        data: any;
+    sections: (import("../index.js").AnyRecord & {
         id: string;
         visible?: boolean;
         section_type_code?: string | null;
+        data?: unknown;
     })[];
 }>;
 export declare function createRootLayoutLoad(config: Pick<LandingFrameworkConfig, 'prisma' | 'getLocale'>): () => Promise<{

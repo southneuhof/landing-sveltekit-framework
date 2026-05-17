@@ -10,13 +10,25 @@ describe('createLandingPageLoad', () => {
             },
         });
     });
-    it('hydrates sections through app-owned loaders', async () => {
-        const loader = vi.fn(async () => ({ loaded: true }));
+    it('hydrates sections through schemas', async () => {
+        const schemas = {
+            hero: {
+                code: 'hero',
+                data: {
+                    content: { type: 'content', order: 1 },
+                    gallery: { type: 'gallery', order: 1, many: true },
+                },
+            },
+        };
+        const findUnique = vi.fn(async () => ({
+            id: 's1',
+            section_type_code: 'hero',
+            contents: [{ id: 'c1', order: 1, title: 'Headline' }],
+            galleries: [{ id: 'g1', order: 1, contents: [{ id: 'gc1', order: 1, title: 'Card' }] }],
+        }));
         const load = createLandingPageLoad({
             getLocale: () => 'en',
-            sectionLoaders: {
-                hero: loader,
-            },
+            sectionSchemas: schemas,
             prisma: {
                 menuItem: {
                     findFirst: async () => ({
@@ -27,20 +39,24 @@ describe('createLandingPageLoad', () => {
                     findUnique: async () => ({
                         sections: [{ id: 's1', visible: true, section_type_code: 'hero' }],
                     }),
+                },
+                section: {
+                    findUnique,
                 },
             },
         });
         const result = await load({ url: new URL('https://example.com/home') });
-        expect(loader).toHaveBeenCalledWith({ id: 's1', visible: true, section_type_code: 'hero' });
-        expect(result.sections[0].data).toEqual({ loaded: true });
+        expect(findUnique).toHaveBeenCalled();
+        expect(result.sections[0].data).toEqual({
+            content: { id: 'c1', order: 1, title: 'Headline' },
+            gallery: [{ id: 'gc1', order: 1, title: 'Card' }],
+        });
     });
-    it('returns null data when a section loader fails', async () => {
+    it('returns null data when section record is missing', async () => {
         const load = createLandingPageLoad({
             getLocale: () => 'en',
-            sectionLoaders: {
-                hero: async () => {
-                    throw new Error('failed');
-                },
+            sectionSchemas: {
+                hero: { code: 'hero', data: { content: { type: 'content', order: 1 } } },
             },
             prisma: {
                 menuItem: {
@@ -52,6 +68,9 @@ describe('createLandingPageLoad', () => {
                     findUnique: async () => ({
                         sections: [{ id: 's1', visible: true, section_type_code: 'hero' }],
                     }),
+                },
+                section: {
+                    findUnique: async () => null,
                 },
             },
         });

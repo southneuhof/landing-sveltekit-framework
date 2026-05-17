@@ -1,4 +1,6 @@
 import { error } from '@sveltejs/kit';
+import { hydrateSectionsFromSchemas } from './schema.js';
+export { readSectionSchemas, createSectionSchemaManager } from './schema.js';
 export { reorderEntries } from '../utils/reorder.js';
 export function createLandingPageLoad(config) {
     return async function load({ url }) {
@@ -41,7 +43,7 @@ export function createLandingPageLoad(config) {
         });
         if (!pageSectionGroup)
             throw error(500, 'Section group not found');
-        const sections = await hydrateSections(pageSectionGroup.sections, config.sectionLoaders ?? {});
+        const sections = await hydrateSectionsFromSchemas(pageSectionGroup.sections, config.prisma, config.sectionSchemas ?? {});
         return { sections };
     };
 }
@@ -75,21 +77,4 @@ export function buildNestedSlugWhere(slugs) {
     }
     currentNestedParent.parent_id = null;
     return finalWhereClause;
-}
-async function hydrateSections(sections, loaders) {
-    return Promise.all(sections.map(async (section) => {
-        if (!section.section_type_code)
-            return section;
-        const loader = loaders[section.section_type_code];
-        let data = null;
-        if (loader) {
-            try {
-                data = await loader(section);
-            }
-            catch (loaderError) {
-                console.error(`Error loading data for section ${section.id} (${section.section_type_code}):`, loaderError);
-            }
-        }
-        return { ...section, data };
-    }));
 }
