@@ -1,0 +1,1 @@
+{"version":3,"file":"background.d.ts","sourceRoot":"","sources":["../../src/actions/background.ts"],"names":[],"mappings":"AA+BA,wBAAgB,UAAU,CAAC,IAAI,EAAE,WAAW,EAAE,QAAQ,EAAE,MAAM,GAAG,SAAS;mBAqCvD,MAAM,GAAG,SAAS;;EAQpC;AAED,wBAAgB,oBAAoB,CAClC,QAAQ,EAAE,MAAM,GAAG,SAAS,EAC5B,OAAO,GAAE;IACP,OAAO,CAAC,EAAE,OAAO,CAAC;IAClB,eAAe,CAAC,EAAE,MAAM,CAAC;CACrB,GACL,MAAM,CASR"}

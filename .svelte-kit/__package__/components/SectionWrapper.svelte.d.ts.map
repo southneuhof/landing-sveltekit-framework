@@ -1,0 +1,1 @@
+{"version":3,"file":"SectionWrapper.svelte.d.ts","sourceRoot":"","sources":["../../src/components/SectionWrapper.svelte.ts"],"names":[],"mappings":"AAKC,KAAK,gBAAgB,GAAG;IAAE,QAAQ,EAAE,GAAG,CAAC;IAAC,KAAK,CAAC,EAAE,MAAM,CAAA;CAAE,CAAC;AAiB3D,QAAA,MAAM,cAAc,sDAAwC,CAAC;AAC7D,KAAK,cAAc,GAAG,UAAU,CAAC,OAAO,cAAc,CAAC,CAAC;AACxD,eAAe,cAAc,CAAC"}
