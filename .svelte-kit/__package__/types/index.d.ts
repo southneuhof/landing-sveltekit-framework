@@ -15,15 +15,31 @@ export type SectionSchemaSlot = {
     order: number;
     many?: boolean;
 };
+export type SectionSchemaMeta = {
+    fields?: readonly string[];
+    inputConfig?: Record<string, AnyRecord>;
+    fieldsAlias?: Record<string, string>;
+    defaultValues?: Record<string, unknown>;
+    getInitialData?: () => Promise<Record<string, unknown>>;
+};
 export type SectionSchema = {
     code: string;
     info?: {
         name?: string;
         description?: string;
     };
+    meta?: SectionSchemaMeta;
     data: Record<string, SectionSchemaSlot>;
 };
 export type SectionSchemaRegistry = Record<string, SectionSchema>;
+export declare function defineSectionSchema<const TSchema extends SectionSchema>(schema: TSchema): TSchema;
+export type SectionMetaField<TSchema extends SectionSchema> = TSchema['meta'] extends {
+    fields?: readonly (infer TField)[];
+} ? TField extends string ? TField : never : never;
+export type SectionMetaValues<TSchema extends SectionSchema> = Partial<Record<SectionMetaField<TSchema>, any>>;
+export type LandingSectionForSchema<TSchema extends SectionSchema> = Omit<LandingSection, 'meta'> & {
+    meta: SectionMetaValues<TSchema>;
+};
 export type SectionDataLoader<TSection extends LandingSection = LandingSection> = (section: TSection, context?: AnyRecord) => Promise<unknown>;
 export type SectionLoaderRegistry<TSection extends LandingSection = LandingSection> = Record<string, SectionDataLoader<TSection>>;
 export type SectionComponentModule = {

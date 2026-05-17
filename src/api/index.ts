@@ -188,7 +188,9 @@ export function createModelCreateHandler(config: HandlerConfig) {
       if (mergedConfig.lifecycle?.pre) body = await mergedConfig.lifecycle.pre(body, event.locals);
       let data = mergedConfig.lifecycle?.main
         ? await mergedConfig.lifecycle.main(body, event.locals)
-        : await config.prisma[event.params.model].create({ data: body });
+        : await config.prisma[event.params.model].create({
+            data: filterWritePayloadByFields(mergedConfig.fields, body),
+          });
       if (mergedConfig.lifecycle?.post) data = await mergedConfig.lifecycle.post(body, data, event.locals);
 
       return success(data, { status: 201 });
@@ -233,7 +235,10 @@ export function createModelUpdateHandler(config: HandlerConfig) {
       if (mergedConfig.lifecycle?.pre) body = await mergedConfig.lifecycle.pre(body, event.locals);
       let data = mergedConfig.lifecycle?.main
         ? await mergedConfig.lifecycle.main(body, event.locals)
-        : await config.prisma[event.params.model].update({ where: whereClause, data: body });
+        : await config.prisma[event.params.model].update({
+            where: whereClause,
+            data: filterWritePayloadByFields(mergedConfig.fields, body),
+          });
       if (mergedConfig.lifecycle?.post) data = await mergedConfig.lifecycle.post(body, data, event.locals);
 
       return success(data, { status: 200 });
@@ -381,6 +386,11 @@ function createSelect(delegate: any, config: ModelConfig) {
     ...Object.fromEntries((config.fields ?? Object.keys(delegate.fields ?? {})).map((field) => [field, true])),
     ...(config.fieldsForeign ? transformFieldsForeign(config.fieldsForeign) : undefined),
   });
+}
+
+function filterWritePayloadByFields(fields: string[] | undefined, body: AnyRecord): AnyRecord {
+  if (!fields) return body;
+  return Object.fromEntries(fields.map((key) => [key, body[key]]));
 }
 
 function applyCustomFields(data: any, customFields?: Array<{ name: string; generator: (data: AnyRecord) => unknown }>) {

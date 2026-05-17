@@ -1,7 +1,15 @@
 import { error } from '@sveltejs/kit';
 import type { LandingFrameworkConfig } from '../types/index.js';
 import { hydrateSectionsFromSchemas } from './schema.js';
-export { readSectionSchemas, createSectionSchemaManager } from './schema.js';
+export {
+  readSectionSchemas,
+  createSectionSchemaManager,
+  createSectionFromSchema,
+} from './schema.js';
+export type {
+  CreateSectionFromSchemaInput,
+  CreateSectionFromSchemaResult,
+} from './schema.js';
 export { reorderEntries } from '../utils/reorder.js';
 export type { ReorderEntriesOptions } from '../utils/reorder.js';
 

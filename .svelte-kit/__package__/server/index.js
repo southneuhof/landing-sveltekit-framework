@@ -1,6 +1,6 @@
 import { error } from '@sveltejs/kit';
 import { hydrateSectionsFromSchemas } from './schema.js';
-export { readSectionSchemas, createSectionSchemaManager } from './schema.js';
+export { readSectionSchemas, createSectionSchemaManager, createSectionFromSchema, } from './schema.js';
 export { reorderEntries } from '../utils/reorder.js';
 export function createLandingPageLoad(config) {
     return async function load({ url }) {

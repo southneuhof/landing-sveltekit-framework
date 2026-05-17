@@ -4,6 +4,20 @@ export { readSectionSchemas, createSectionSchemaManager } from '../schema/index.
 type PrismaOrderBy = { order: 'asc' };
 type PrismaInclude = Record<string, unknown>;
 
+export type CreateSectionFromSchemaInput = {
+  prisma: any;
+  sectionSchemas: SectionSchemaRegistry;
+  sectionGroupId: string;
+  sectionTypeCode: string;
+  name?: string;
+  description?: string | null;
+  meta?: Record<string, unknown>;
+};
+
+export type CreateSectionFromSchemaResult = {
+  section: LandingSection;
+};
+
 function orderByAsc(): PrismaOrderBy {
   return { order: 'asc' };
 }
@@ -161,4 +175,100 @@ export async function hydrateSectionsFromSchemas(
       return normalizeSectionRecord(record, sectionSchemas);
     }),
   );
+}
+
+async function materializeSectionSchemaSlots({
+  prisma,
+  parentSection,
+  schema,
+}: {
+  prisma: any;
+  parentSection: LandingSection;
+  schema: SectionSchema;
+}): Promise<void> {
+  const slots = Object.values(schema.data).sort((a, b) => a.order - b.order);
+
+  for (const slot of slots) {
+    if (slot.type === 'content') {
+      await prisma.content.create({
+        data: {
+          order: slot.order,
+          section_id: parentSection.id,
+        },
+      });
+      continue;
+    }
+
+    if (slot.type === 'gallery') {
+      await prisma.gallery.create({
+        data: {
+          order: slot.order,
+          section_id: parentSection.id,
+        },
+      });
+      continue;
+    }
+
+    if (slot.type === 'section') {
+      await prisma.section.create({
+        data: {
+          name: `Child of ${parentSection.name}`,
+          order: slot.order,
+          parent_section_id: parentSection.id,
+        },
+      });
+      continue;
+    }
+
+    await prisma.sectionGroup.create({
+      data: {
+        order: slot.order,
+        parent_section_id: parentSection.id,
+      },
+    });
+  }
+}
+
+export async function createSectionFromSchema(
+  input: CreateSectionFromSchemaInput,
+): Promise<CreateSectionFromSchemaResult> {
+  const { prisma, sectionSchemas, sectionGroupId, sectionTypeCode } = input;
+
+  if (!sectionGroupId) {
+    throw new Error('sectionGroupId is required');
+  }
+
+  if (!sectionTypeCode) {
+    throw new Error('sectionTypeCode is required');
+  }
+
+  const schema = sectionSchemas[sectionTypeCode];
+  if (!schema) {
+    throw new Error(`Unknown section schema code "${sectionTypeCode}"`);
+  }
+
+  const maxOrderSection = await prisma.section.findFirst({
+    where: { section_group_id: sectionGroupId },
+    orderBy: { order: 'desc' },
+    select: { order: true },
+  });
+
+  const section = await prisma.section.create({
+    data: {
+      name: input.name ?? schema.info?.name ?? sectionTypeCode,
+      description: input.description ?? schema.info?.description ?? null,
+      order: (maxOrderSection?.order ?? 0) + 1,
+      section_group_id: sectionGroupId,
+      section_type_code: sectionTypeCode,
+      meta: input.meta ?? schema.meta?.defaultValues ?? {},
+    },
+  });
+
+  await materializeSectionSchemaSlots({
+    prisma,
+    parentSection: section,
+    schema,
+  });
+
+  return { section };
 }

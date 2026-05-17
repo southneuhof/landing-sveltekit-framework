@@ -117,6 +117,128 @@ describe('crud canonical response contract', () => {
             data: { id: 'a', title: 'A2' },
         });
     });
+    it('update writes only whitelisted fields in default prisma path', async () => {
+        const prismaUpdate = vi.fn(async () => ({ id: 'a', title: 'A2' }));
+        const response = await createModelUpdateHandler(createConfig({ article: { update: prismaUpdate } }, {
+            ...baseModelConfig,
+            update: { allow: true, by: ['id'], fields: ['title'] },
+        }))({
+            request: new Request('http://localhost/api/article/update', {
+                method: 'PUT',
+                body: JSON.stringify({
+                    id: 'a',
+                    title: 'A2',
+                    section_group_id: 'group-id',
+                    structure: [{ id: 'x' }],
+                    updated_at: '2026-05-17T17:15:15.563Z',
+                }),
+            }),
+            params: { model },
+            locals: createLocals(),
+        });
+        expect(response.status).toBe(200);
+        expect(prismaUpdate).toHaveBeenCalledWith({
+            where: { id: 'a' },
+            data: { title: 'A2' },
+        });
+    });
+    it('create writes only whitelisted fields in default prisma path', async () => {
+        const prismaCreate = vi.fn(async () => ({ id: 'a', title: 'A' }));
+        const response = await createModelCreateHandler(createConfig({ article: { create: prismaCreate } }, {
+            ...baseModelConfig,
+            create: { allow: true, fields: ['title'] },
+        }))({
+            request: new Request('http://localhost/api/article/create', {
+                method: 'POST',
+                body: JSON.stringify({
+                    title: 'A',
+                    section_group_id: 'group-id',
+                    structure: [{ id: 'x' }],
+                    updated_at: '2026-05-17T17:15:15.563Z',
+                }),
+            }),
+            params: { model },
+            locals: createLocals(),
+        });
+        expect(response.status).toBe(201);
+        expect(prismaCreate).toHaveBeenCalledWith({
+            data: { title: 'A' },
+        });
+    });
+    it('create and update pass full body when fields are not configured', async () => {
+        const prismaCreate = vi.fn(async () => ({ id: 'a', title: 'A' }));
+        const prismaUpdate = vi.fn(async () => ({ id: 'a', title: 'A2' }));
+        const fullBody = {
+            id: 'a',
+            title: 'A2',
+            section_group_id: 'group-id',
+            structure: [{ id: 'x' }],
+            updated_at: '2026-05-17T17:15:15.563Z',
+        };
+        const modelConfigWithoutFields = {
+            ...baseModelConfig,
+            fields: undefined,
+        };
+        const createResponse = await createModelCreateHandler(createConfig({ article: { create: prismaCreate } }, {
+            ...modelConfigWithoutFields,
+            create: { allow: true },
+        }))({
+            request: new Request('http://localhost/api/article/create', {
+                method: 'POST',
+                body: JSON.stringify(fullBody),
+            }),
+            params: { model },
+            locals: createLocals(),
+        });
+        const updateResponse = await createModelUpdateHandler(createConfig({ article: { update: prismaUpdate } }, {
+            ...modelConfigWithoutFields,
+            update: { allow: true, by: ['id'] },
+        }))({
+            request: new Request('http://localhost/api/article/update', {
+                method: 'PUT',
+                body: JSON.stringify(fullBody),
+            }),
+            params: { model },
+            locals: createLocals(),
+        });
+        expect(createResponse.status).toBe(201);
+        expect(updateResponse.status).toBe(200);
+        expect(prismaCreate).toHaveBeenCalledWith({ data: fullBody });
+        expect(prismaUpdate).toHaveBeenCalledWith({
+            where: { id: 'a' },
+            data: fullBody,
+        });
+    });
+    it('update lifecycle.main receives full body and bypasses default prisma update', async () => {
+        const prismaUpdate = vi.fn(async () => ({ id: 'a', title: 'A2' }));
+        const lifecycleMain = vi.fn(async (body) => ({ ok: true, body }));
+        const payload = {
+            id: 'a',
+            title: 'A2',
+            section_group_id: 'group-id',
+            structure: [{ id: 'x' }],
+            updated_at: '2026-05-17T17:15:15.563Z',
+        };
+        const response = await createModelUpdateHandler(createConfig({ article: { update: prismaUpdate } }, {
+            ...baseModelConfig,
+            update: {
+                allow: true,
+                by: ['id'],
+                fields: ['title'],
+                lifecycle: { main: lifecycleMain },
+            },
+        }))({
+            request: new Request('http://localhost/api/article/update', {
+                method: 'PUT',
+                body: JSON.stringify(payload),
+            }),
+            params: { model },
+            locals: createLocals(),
+        });
+        expect(response.status).toBe(200);
+        expect(lifecycleMain).toHaveBeenCalledWith(payload, expect.anything());
+        expect(prismaUpdate).not.toHaveBeenCalled();
+    });
     it('delete response shape', async () => {
         const response = await createModelDeleteHandler(createConfig({
             article: {
