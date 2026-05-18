@@ -16,6 +16,7 @@ export type SectionSchemaSlot = {
   type: SectionSchemaSlotType;
   order: number;
   many?: boolean;
+  data?: Record<string, SectionSchemaSlot>;
 };
 
 export type SectionSchemaMeta = {
