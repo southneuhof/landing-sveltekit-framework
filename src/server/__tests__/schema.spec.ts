@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import { readSectionSchemas } from '../../schema/index.js';
-import { buildSectionIncludeFromSchema, createSectionFromSchema } from '../schema.js';
+import {
+  buildSectionIncludeFromSchema,
+  createNestedSectionFromSchemaData,
+  createSectionFromSchema,
+} from '../schema.js';
 
 describe('readSectionSchemas', () => {
   it('reads eager glob default exports into a code registry', () => {
@@ -31,6 +35,369 @@ describe('readSectionSchemas', () => {
         '/sections/a.ts': { code: '', data: {} },
       }),
     ).toThrow(/Expected a default export with a non-empty "code"/);
+  });
+});
+
+describe('createNestedSectionFromSchemaData', () => {
+  it('creates a plain child section and materializes nested group-owned slots', async () => {
+    const prisma = {
+      sectionGroup: {
+        findUnique: vi.fn(async () => ({
+          id: 'group1',
+          order: 2,
+          parentSection: {
+            id: 'parent1',
+            name: 'Data List',
+            section_type_code: 'data-list',
+          },
+        })),
+        create: vi.fn(async () => ({})),
+      },
+      section: {
+        findFirst: vi.fn(async () => null),
+        create: vi.fn(async ({ data }) => ({ id: 'child1', ...data })),
+      },
+      content: {
+        create: vi.fn(async () => ({})),
+      },
+      gallery: {
+        create: vi.fn(async ({ data }) => ({ id: 'gallery1', ...data })),
+      },
+    };
+
+    const result = await createNestedSectionFromSchemaData({
+      prisma,
+      sectionSchemas: {
+        'data-list': {
+          code: 'data-list',
+          data: {
+            content: { type: 'content', order: 1 },
+            childSections: {
+              type: 'sectionGroup',
+              order: 2,
+              data: {
+                gallery: { type: 'gallery', order: 1 },
+              },
+            },
+          },
+        },
+      },
+      sectionGroupId: 'group1',
+    });
+
+    expect(result.section.section_group_id).toBe('group1');
+    expect(result.section.section_type_code).toBeNull();
+    expect(result.section.name).toBe('Item 1');
+    expect(prisma.section.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          section_group_id: 'group1',
+          section_type_code: null,
+          order: 1,
+          meta: {},
+        }),
+      }),
+    );
+    expect(prisma.gallery.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          section_id: 'child1',
+          order: 1,
+        }),
+      }),
+    );
+    expect(prisma.content.create).not.toHaveBeenCalled();
+  });
+
+  it('uses next order and default item name', async () => {
+    const prisma = {
+      sectionGroup: {
+        findUnique: vi.fn(async () => ({
+          id: 'group1',
+          order: 2,
+          parentSection: {
+            id: 'parent1',
+            name: 'Data List',
+            section_type_code: 'data-list',
+          },
+        })),
+        create: vi.fn(async () => ({})),
+      },
+      section: {
+        findFirst: vi.fn(async () => ({ order: 4 })),
+        create: vi.fn(async ({ data }) => ({ id: 'child5', ...data })),
+      },
+      content: {
+        create: vi.fn(async () => ({})),
+      },
+      gallery: {
+        create: vi.fn(async () => ({})),
+      },
+    };
+
+    const result = await createNestedSectionFromSchemaData({
+      prisma,
+      sectionSchemas: {
+        'data-list': {
+          code: 'data-list',
+          data: {
+            childSections: {
+              type: 'sectionGroup',
+              order: 2,
+              data: {
+                gallery: { type: 'gallery', order: 1 },
+              },
+            },
+          },
+        },
+      },
+      sectionGroupId: 'group1',
+    });
+
+    expect(result.section.order).toBe(5);
+    expect(result.section.name).toBe('Item 5');
+  });
+
+  it('materializes nested section slot data recursively', async () => {
+    const prisma = {
+      sectionGroup: {
+        findUnique: vi.fn(async () => ({
+          id: 'group1',
+          order: 2,
+          parentSection: {
+            id: 'parent1',
+            name: 'Data List',
+            section_type_code: 'data-list',
+          },
+        })),
+        create: vi.fn(async () => ({})),
+      },
+      section: {
+        findFirst: vi.fn(async () => null),
+        create: vi
+          .fn()
+          .mockImplementationOnce(async ({ data }) => ({ id: 'added1', ...data }))
+          .mockImplementationOnce(async ({ data }) => ({ id: 'child-under-added', ...data })),
+      },
+      content: {
+        create: vi.fn(async () => ({})),
+      },
+      gallery: {
+        create: vi.fn(async () => ({})),
+      },
+    };
+
+    await createNestedSectionFromSchemaData({
+      prisma,
+      sectionSchemas: {
+        'data-list': {
+          code: 'data-list',
+          data: {
+            childSections: {
+              type: 'sectionGroup',
+              order: 2,
+              data: {
+                childSection: {
+                  type: 'section',
+                  order: 1,
+                  data: {
+                    gallery: { type: 'gallery', order: 1 },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      sectionGroupId: 'group1',
+    });
+
+    expect(prisma.section.create).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        data: expect.objectContaining({
+          section_group_id: 'group1',
+        }),
+      }),
+    );
+    expect(prisma.section.create).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        data: expect.objectContaining({
+          parent_section_id: 'added1',
+          order: 1,
+        }),
+      }),
+    );
+    expect(prisma.gallery.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          section_id: 'child-under-added',
+          order: 1,
+        }),
+      }),
+    );
+  });
+
+  it('does not auto-create inner sections for nested sectionGroup.data', async () => {
+    const prisma = {
+      sectionGroup: {
+        findUnique: vi.fn(async () => ({
+          id: 'group1',
+          order: 2,
+          parentSection: {
+            id: 'parent1',
+            name: 'Data List',
+            section_type_code: 'data-list',
+          },
+        })),
+        create: vi.fn(async () => ({})),
+      },
+      section: {
+        findFirst: vi.fn(async () => null),
+        create: vi.fn(async ({ data }) => ({ id: 'added1', ...data })),
+      },
+      content: {
+        create: vi.fn(async () => ({})),
+      },
+      gallery: {
+        create: vi.fn(async () => ({})),
+      },
+    };
+
+    await createNestedSectionFromSchemaData({
+      prisma,
+      sectionSchemas: {
+        'data-list': {
+          code: 'data-list',
+          data: {
+            childSections: {
+              type: 'sectionGroup',
+              order: 2,
+              data: {
+                nestedGroup: {
+                  type: 'sectionGroup',
+                  order: 1,
+                  data: {
+                    gallery: { type: 'gallery', order: 1 },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      sectionGroupId: 'group1',
+    });
+
+    expect(prisma.sectionGroup.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          parent_section_id: 'added1',
+          order: 1,
+        }),
+      }),
+    );
+    expect(prisma.section.create).toHaveBeenCalledTimes(1);
+    expect(prisma.gallery.create).not.toHaveBeenCalled();
+  });
+
+  it('throws clear errors for missing inputs and invalid nested context', async () => {
+    const prismaWithGroup = {
+      sectionGroup: {
+        findUnique: vi.fn(async () => ({
+          id: 'group1',
+          order: 2,
+          parentSection: {
+            id: 'parent1',
+            name: 'Data List',
+            section_type_code: 'data-list',
+          },
+        })),
+      },
+      section: {
+        findFirst: vi.fn(async () => null),
+        create: vi.fn(async ({ data }) => ({ id: 'added1', ...data })),
+      },
+      content: { create: vi.fn(async () => ({})) },
+      gallery: { create: vi.fn(async () => ({})) },
+    };
+
+    await expect(
+      createNestedSectionFromSchemaData({
+        prisma: prismaWithGroup,
+        sectionSchemas: {},
+        sectionGroupId: '',
+      }),
+    ).rejects.toThrow(/sectionGroupId is required/);
+
+    const prismaNoGroup = {
+      ...prismaWithGroup,
+      sectionGroup: { findUnique: vi.fn(async () => null) },
+    };
+    await expect(
+      createNestedSectionFromSchemaData({
+        prisma: prismaNoGroup,
+        sectionSchemas: {},
+        sectionGroupId: 'group1',
+      }),
+    ).rejects.toThrow(/Section group not found/);
+
+    const prismaNoParent = {
+      ...prismaWithGroup,
+      sectionGroup: {
+        findUnique: vi.fn(async () => ({
+          id: 'group1',
+          order: 2,
+          parentSection: null,
+        })),
+      },
+    };
+    await expect(
+      createNestedSectionFromSchemaData({
+        prisma: prismaNoParent,
+        sectionSchemas: {},
+        sectionGroupId: 'group1',
+      }),
+    ).rejects.toThrow(/section_type_code is required for non-nested section groups/);
+
+    await expect(
+      createNestedSectionFromSchemaData({
+        prisma: prismaWithGroup,
+        sectionSchemas: {},
+        sectionGroupId: 'group1',
+      }),
+    ).rejects.toThrow(/Parent section schema not found for nested section group/);
+
+    await expect(
+      createNestedSectionFromSchemaData({
+        prisma: prismaWithGroup,
+        sectionSchemas: {
+          'data-list': {
+            code: 'data-list',
+            data: {
+              somethingElse: { type: 'sectionGroup', order: 7 },
+            },
+          },
+        },
+        sectionGroupId: 'group1',
+      }),
+    ).rejects.toThrow(/No sectionGroup slot found for nested section group/);
+
+    await expect(
+      createNestedSectionFromSchemaData({
+        prisma: prismaWithGroup,
+        sectionSchemas: {
+          'data-list': {
+            code: 'data-list',
+            data: {
+              childSections: { type: 'sectionGroup', order: 2 },
+            },
+          },
+        },
+        sectionGroupId: 'group1',
+      }),
+    ).rejects.toThrow(/section_type_code is required for section groups without nested schema data/);
   });
 });
 

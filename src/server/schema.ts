@@ -18,6 +18,18 @@ export type CreateSectionFromSchemaResult = {
   section: LandingSection;
 };
 
+export type CreateNestedSectionFromSchemaDataInput = {
+  prisma: any;
+  sectionSchemas: SectionSchemaRegistry;
+  sectionGroupId: string;
+  name?: string;
+  description?: string | null;
+};
+
+export type CreateNestedSectionFromSchemaDataResult = {
+  section: LandingSection;
+};
+
 function orderByAsc(): PrismaOrderBy {
   return { order: 'asc' };
 }
@@ -177,16 +189,16 @@ export async function hydrateSectionsFromSchemas(
   );
 }
 
-async function materializeSectionSchemaSlots({
+async function materializeSectionSchemaData({
   prisma,
   parentSection,
-  schema,
+  schemaData,
 }: {
   prisma: any;
   parentSection: LandingSection;
-  schema: SectionSchema;
+  schemaData: Record<string, SectionSchemaSlot>;
 }): Promise<void> {
-  const slots = Object.values(schema.data).sort((a, b) => a.order - b.order);
+  const slots = Object.values(schemaData).sort((a, b) => a.order - b.order);
 
   for (const slot of slots) {
     if (slot.type === 'content') {
@@ -210,13 +222,20 @@ async function materializeSectionSchemaSlots({
     }
 
     if (slot.type === 'section') {
-      await prisma.section.create({
+      const childSection = await prisma.section.create({
         data: {
           name: `Child of ${parentSection.name}`,
           order: slot.order,
           parent_section_id: parentSection.id,
         },
       });
+      if (slot.data) {
+        await materializeSectionSchemaData({
+          prisma,
+          parentSection: childSection,
+          schemaData: slot.data,
+        });
+      }
       continue;
     }
 
@@ -264,10 +283,80 @@ export async function createSectionFromSchema(
     },
   });
 
-  await materializeSectionSchemaSlots({
+  await materializeSectionSchemaData({
     prisma,
     parentSection: section,
-    schema,
+    schemaData: schema.data,
+  });
+
+  return { section };
+}
+
+export async function createNestedSectionFromSchemaData(
+  input: CreateNestedSectionFromSchemaDataInput,
+): Promise<CreateNestedSectionFromSchemaDataResult> {
+  const { prisma, sectionSchemas, sectionGroupId } = input;
+
+  if (!sectionGroupId) {
+    throw new Error('sectionGroupId is required');
+  }
+
+  const sectionGroup = await prisma.sectionGroup.findUnique({
+    where: { id: sectionGroupId },
+    include: {
+      parentSection: true,
+    },
+  });
+
+  if (!sectionGroup) {
+    throw new Error('Section group not found');
+  }
+
+  if (!sectionGroup.parentSection) {
+    throw new Error('section_type_code is required for non-nested section groups');
+  }
+
+  const parentCode = sectionGroup.parentSection.section_type_code ?? '';
+  const parentSchema = sectionSchemas[parentCode];
+
+  if (!parentSchema) {
+    throw new Error('Parent section schema not found for nested section group');
+  }
+
+  const groupSlot = Object.values(parentSchema.data).find(
+    (slot) => slot.type === 'sectionGroup' && slot.order === sectionGroup.order,
+  );
+
+  if (!groupSlot) {
+    throw new Error('No sectionGroup slot found for nested section group');
+  }
+
+  if (!groupSlot.data) {
+    throw new Error('section_type_code is required for section groups without nested schema data');
+  }
+
+  const maxOrderSection = await prisma.section.findFirst({
+    where: { section_group_id: sectionGroupId },
+    orderBy: { order: 'desc' },
+    select: { order: true },
+  });
+
+  const nextOrder = (maxOrderSection?.order ?? 0) + 1;
+  const section = await prisma.section.create({
+    data: {
+      name: input.name ?? `Item ${nextOrder}`,
+      description: input.description ?? null,
+      order: nextOrder,
+      section_group_id: sectionGroupId,
+      section_type_code: null,
+      meta: {},
+    },
+  });
+
+  await materializeSectionSchemaData({
+    prisma,
+    parentSection: section,
+    schemaData: groupSlot.data,
   });
 
   return { section };

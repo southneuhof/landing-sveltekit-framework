@@ -5,10 +5,13 @@ export {
   readSectionSchemas,
   createSectionSchemaManager,
   createSectionFromSchema,
+  createNestedSectionFromSchemaData,
 } from './schema.js';
 export type {
   CreateSectionFromSchemaInput,
   CreateSectionFromSchemaResult,
+  CreateNestedSectionFromSchemaDataInput,
+  CreateNestedSectionFromSchemaDataResult,
 } from './schema.js';
 export { reorderEntries } from '../utils/reorder.js';
 export type { ReorderEntriesOptions } from '../utils/reorder.js';
