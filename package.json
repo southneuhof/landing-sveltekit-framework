@@ -67,6 +67,9 @@
     "dist",
     "src",
     "!dist/**/*.tsbuildinfo",
+    "!dist/**/__tests__/**",
+    "!dist/**/*.spec.*",
+    "!dist/**/*.test.*",
     "!src/**/__tests__/**",
     "!src/**/*.spec.*",
     "!src/**/*.test.*",
@@ -99,7 +102,7 @@
     "build": "pnpm clean && svelte-package && pnpm clean:build-info && pnpm clean:test-output",
     "clean": "node ../../scripts/clean-package.mjs dist package",
     "clean:build-info": "node ../../scripts/clean-package.mjs dist/tsconfig.tsbuildinfo",
-    "clean:test-output": "node ../../scripts/clean-package.mjs dist/auth/__tests__ dist/server/__tests__ dist/storage/__tests__",
+    "clean:test-output": "node ../../scripts/clean-built-test-output.mjs dist",
     "type-check": "svelte-check --tsconfig ./tsconfig.json",
     "test": "vitest run"
   }
