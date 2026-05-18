@@ -75,8 +75,20 @@ describe('createNestedSectionFromSchemaData', () => {
             childSections: {
               type: 'sectionGroup',
               order: 2,
-              data: {
-                gallery: { type: 'gallery', order: 1 },
+              schema: {
+                info: {
+                  name: 'Data Item',
+                  description: 'Single data-list item',
+                },
+                meta: {
+                  fields: ['status'],
+                  defaultValues: {
+                    status: 'draft',
+                  },
+                },
+                data: {
+                  gallery: { type: 'gallery', order: 1 },
+                },
               },
             },
           },
@@ -87,14 +99,16 @@ describe('createNestedSectionFromSchemaData', () => {
 
     expect(result.section.section_group_id).toBe('group1');
     expect(result.section.section_type_code).toBeNull();
-    expect(result.section.name).toBe('Item 1');
+    expect(result.section.name).toBe('Data Item');
+    expect(result.section.description).toBe('Single data-list item');
+    expect(result.section.meta).toEqual({ status: 'draft' });
     expect(prisma.section.create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
           section_group_id: 'group1',
           section_type_code: null,
           order: 1,
-          meta: {},
+          meta: { status: 'draft' },
         }),
       }),
     );
@@ -144,8 +158,10 @@ describe('createNestedSectionFromSchemaData', () => {
             childSections: {
               type: 'sectionGroup',
               order: 2,
-              data: {
-                gallery: { type: 'gallery', order: 1 },
+              schema: {
+                data: {
+                  gallery: { type: 'gallery', order: 1 },
+                },
               },
             },
           },
@@ -158,7 +174,7 @@ describe('createNestedSectionFromSchemaData', () => {
     expect(result.section.name).toBe('Item 5');
   });
 
-  it('materializes nested section slot data recursively', async () => {
+  it('materializes nested section slots recursively', async () => {
     const prisma = {
       sectionGroup: {
         findUnique: vi.fn(async () => ({
@@ -196,12 +212,24 @@ describe('createNestedSectionFromSchemaData', () => {
             childSections: {
               type: 'sectionGroup',
               order: 2,
-              data: {
-                childSection: {
-                  type: 'section',
-                  order: 1,
-                  data: {
-                    gallery: { type: 'gallery', order: 1 },
+              schema: {
+                data: {
+                  childSection: {
+                    type: 'section',
+                    order: 1,
+                    schema: {
+                      info: {
+                        name: 'Nested Child',
+                      },
+                      meta: {
+                        defaultValues: {
+                          layout: 'compact',
+                        },
+                      },
+                      data: {
+                        gallery: { type: 'gallery', order: 1 },
+                      },
+                    },
                   },
                 },
               },
@@ -226,6 +254,8 @@ describe('createNestedSectionFromSchemaData', () => {
         data: expect.objectContaining({
           parent_section_id: 'added1',
           order: 1,
+          name: 'Nested Child',
+          meta: { layout: 'compact' },
         }),
       }),
     );
@@ -239,7 +269,7 @@ describe('createNestedSectionFromSchemaData', () => {
     );
   });
 
-  it('does not auto-create inner sections for nested sectionGroup.data', async () => {
+  it('does not auto-create sections for nested sectionGroup schema', async () => {
     const prisma = {
       sectionGroup: {
         findUnique: vi.fn(async () => ({
@@ -274,12 +304,16 @@ describe('createNestedSectionFromSchemaData', () => {
             childSections: {
               type: 'sectionGroup',
               order: 2,
-              data: {
-                nestedGroup: {
-                  type: 'sectionGroup',
-                  order: 1,
-                  data: {
-                    gallery: { type: 'gallery', order: 1 },
+              schema: {
+                data: {
+                  nestedGroup: {
+                    type: 'sectionGroup',
+                    order: 1,
+                    schema: {
+                      data: {
+                        gallery: { type: 'gallery', order: 1 },
+                      },
+                    },
                   },
                 },
               },
@@ -397,7 +431,65 @@ describe('createNestedSectionFromSchemaData', () => {
         },
         sectionGroupId: 'group1',
       }),
-    ).rejects.toThrow(/section_type_code is required for section groups without nested schema data/);
+    ).rejects.toThrow(/section_type_code is required for section groups without nested schema/);
+  });
+
+  it('prefers explicit input name and description over nested schema defaults', async () => {
+    const prisma = {
+      sectionGroup: {
+        findUnique: vi.fn(async () => ({
+          id: 'group1',
+          order: 2,
+          parentSection: {
+            id: 'parent1',
+            name: 'Data List',
+            section_type_code: 'data-list',
+          },
+        })),
+      },
+      section: {
+        findFirst: vi.fn(async () => null),
+        create: vi.fn(async ({ data }) => ({ id: 'child1', ...data })),
+      },
+      content: { create: vi.fn(async () => ({})) },
+      gallery: { create: vi.fn(async () => ({})) },
+    };
+
+    const result = await createNestedSectionFromSchemaData({
+      prisma,
+      sectionSchemas: {
+        'data-list': {
+          code: 'data-list',
+          data: {
+            childSections: {
+              type: 'sectionGroup',
+              order: 2,
+              schema: {
+                info: {
+                  name: 'Data Item',
+                  description: 'Single data-list item',
+                },
+                meta: {
+                  defaultValues: {
+                    status: 'draft',
+                  },
+                },
+                data: {
+                  gallery: { type: 'gallery', order: 1 },
+                },
+              },
+            },
+          },
+        },
+      },
+      sectionGroupId: 'group1',
+      name: 'Custom Name',
+      description: 'Custom Description',
+    });
+
+    expect(result.section.name).toBe('Custom Name');
+    expect(result.section.description).toBe('Custom Description');
+    expect(result.section.meta).toEqual({ status: 'draft' });
   });
 });
 

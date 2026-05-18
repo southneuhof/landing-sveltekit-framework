@@ -12,11 +12,20 @@ export type LandingSection = AnyRecord & {
 
 export type SectionSchemaSlotType = 'content' | 'gallery' | 'section' | 'sectionGroup';
 
+export type NestedSectionSchema = {
+  info?: {
+    name?: string;
+    description?: string;
+  };
+  meta?: SectionSchemaMeta;
+  data: Record<string, SectionSchemaSlot>;
+};
+
 export type SectionSchemaSlot = {
   type: SectionSchemaSlotType;
   order: number;
   many?: boolean;
-  data?: Record<string, SectionSchemaSlot>;
+  schema?: NestedSectionSchema;
 };
 
 export type SectionSchemaMeta = {

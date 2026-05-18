@@ -222,18 +222,22 @@ async function materializeSectionSchemaData({
     }
 
     if (slot.type === 'section') {
+      const childSchema = slot.schema;
       const childSection = await prisma.section.create({
         data: {
-          name: `Child of ${parentSection.name}`,
+          name: childSchema?.info?.name ?? `Child of ${parentSection.name}`,
+          description: childSchema?.info?.description ?? null,
           order: slot.order,
           parent_section_id: parentSection.id,
+          section_type_code: null,
+          meta: childSchema?.meta?.defaultValues ?? {},
         },
       });
-      if (slot.data) {
+      if (childSchema) {
         await materializeSectionSchemaData({
           prisma,
           parentSection: childSection,
-          schemaData: slot.data,
+          schemaData: childSchema.data,
         });
       }
       continue;
@@ -331,8 +335,10 @@ export async function createNestedSectionFromSchemaData(
     throw new Error('No sectionGroup slot found for nested section group');
   }
 
-  if (!groupSlot.data) {
-    throw new Error('section_type_code is required for section groups without nested schema data');
+  const nestedSchema = groupSlot.schema;
+
+  if (!nestedSchema) {
+    throw new Error('section_type_code is required for section groups without nested schema');
   }
 
   const maxOrderSection = await prisma.section.findFirst({
@@ -344,19 +350,19 @@ export async function createNestedSectionFromSchemaData(
   const nextOrder = (maxOrderSection?.order ?? 0) + 1;
   const section = await prisma.section.create({
     data: {
-      name: input.name ?? `Item ${nextOrder}`,
-      description: input.description ?? null,
+      name: input.name ?? nestedSchema.info?.name ?? `Item ${nextOrder}`,
+      description: input.description ?? nestedSchema.info?.description ?? null,
       order: nextOrder,
       section_group_id: sectionGroupId,
       section_type_code: null,
-      meta: {},
+      meta: nestedSchema.meta?.defaultValues ?? {},
     },
   });
 
   await materializeSectionSchemaData({
     prisma,
     parentSection: section,
-    schemaData: groupSlot.data,
+    schemaData: nestedSchema.data,
   });
 
   return { section };
