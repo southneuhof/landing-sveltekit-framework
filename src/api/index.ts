@@ -319,7 +319,6 @@ export function createModelCreateHandler(config: HandlerConfig) {
 export function createModelUpdateHandler(config: HandlerConfig) {
   return async function PUT(event: any) {
     try {
-      // console.log('PUT event:', event);
       const modelConfig = await resolveModelConfig(config.modelConfigs, event.params.model);
       assertModel(config.prisma, event.params.model);
       const mergedConfig = mergeUpdateConfigs(modelConfig, modelConfig.create, modelConfig.update);
@@ -327,7 +326,6 @@ export function createModelUpdateHandler(config: HandlerConfig) {
 
       let body = await event.request.json();
 
-      console.log('PUT body 1:', body);
 
       await authorize(config, event, event.params.model, 'update', mergedConfig, body);
       if (mergedConfig.validation) await validateFields(body, mergedConfig.validation);
@@ -351,8 +349,6 @@ export function createModelUpdateHandler(config: HandlerConfig) {
           deleteReplacedFiles: true,
         });
       }
-
-      console.log('PUT body 2:', body);
 
       if (mergedConfig.lifecycle?.pre) body = await mergedConfig.lifecycle.pre(body, event.locals);
       let data = mergedConfig.lifecycle?.main
@@ -670,7 +666,7 @@ function resolveAssetBaseUrl(): string | undefined {
 
 function transformAssetValue(value: unknown, baseUrl?: string): unknown {
   if (typeof value === 'string') {
-    return normalizeAssetString(value, baseUrl);
+    return toAdminAssetObject(value, baseUrl);
   }
 
   if (Array.isArray(value)) {
@@ -683,19 +679,19 @@ function transformAssetValue(value: unknown, baseUrl?: string): unknown {
 
   const output: Record<string, unknown> = {};
   for (const [key, child] of Object.entries(value)) {
-    if ((key === 'path' || key === 'url' || key === 'data') && typeof child === 'string') {
-      output[key] = normalizeAssetString(child, baseUrl);
-      continue;
-    }
     output[key] = transformAssetValue(child, baseUrl);
   }
   return output;
 }
 
-function normalizeAssetString(value: string, baseUrl?: string): string {
+function toAdminAssetObject(value: string, baseUrl?: string): unknown {
   const normalized = toStoredAssetPath(value);
   if (!normalized.startsWith('/storage/')) return value;
-  return toPublicAssetUrl(normalized, baseUrl);
+  return {
+    path: normalized,
+    data: normalized,
+    url: toPublicAssetUrl(normalized, baseUrl),
+  };
 }
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {

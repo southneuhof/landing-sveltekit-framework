@@ -48,7 +48,7 @@ function createLocals() {
 }
 
 describe('crud canonical response contract', () => {
-  it('expands storage asset URLs in admin responses when PUBLIC_APP_URL is set', async () => {
+  it('converts storage asset strings to { path, data, url } objects when PUBLIC_APP_URL is set', async () => {
     const previous = process.env.PUBLIC_APP_URL;
     process.env.PUBLIC_APP_URL = 'https://landing.example.com';
 
@@ -81,20 +81,40 @@ describe('crud canonical response contract', () => {
       ok: true,
       data: {
         id: 'a',
-        media: 'https://landing.example.com/storage/public/a.jpg',
-        attachment: 'https://landing.example.com/storage/private/doc.pdf',
+        media: {
+          path: '/storage/public/a.jpg',
+          data: '/storage/public/a.jpg',
+          url: 'https://landing.example.com/storage/public/a.jpg',
+        },
+        attachment: {
+          path: '/storage/private/doc.pdf',
+          data: '/storage/private/doc.pdf',
+          url: 'https://landing.example.com/storage/private/doc.pdf',
+        },
         icon: 'ri-home-line',
         meta: {
           nested: [
-            { path: 'https://landing.example.com/storage/public/nested.png' },
-            { url: 'https://landing.example.com/storage/private/inner.pdf' },
+            {
+              path: {
+                path: '/storage/public/nested.png',
+                data: '/storage/public/nested.png',
+                url: 'https://landing.example.com/storage/public/nested.png',
+              },
+            },
+            {
+              url: {
+                path: '/storage/private/inner.pdf',
+                data: '/storage/private/inner.pdf',
+                url: 'https://landing.example.com/storage/private/inner.pdf',
+              },
+            },
           ],
         },
       },
     });
   });
 
-  it('keeps external URLs and uses canonical paths when PUBLIC_APP_URL is missing', async () => {
+  it('keeps external URLs and uses canonical path for url field when PUBLIC_APP_URL is missing', async () => {
     const previous = process.env.PUBLIC_APP_URL;
     delete process.env.PUBLIC_APP_URL;
 
@@ -124,17 +144,25 @@ describe('crud canonical response contract', () => {
       ok: true,
       data: {
         id: 'a',
-        media: '/storage/public/a.jpg',
+        media: {
+          path: '/storage/public/a.jpg',
+          data: '/storage/public/a.jpg',
+          url: '/storage/public/a.jpg',
+        },
         source: 'https://youtube.com/watch?v=x',
         meta: {
-          data: '/storage/private/file.pdf',
+          data: {
+            path: '/storage/private/file.pdf',
+            data: '/storage/private/file.pdf',
+            url: '/storage/private/file.pdf',
+          },
           contact: 'mailto:test@example.com',
         },
       },
     });
   });
 
-  it('preserves non-plain response objects while normalizing nested plain records', async () => {
+  it('preserves non-plain response objects while converting nested storage values', async () => {
     const previous = process.env.PUBLIC_APP_URL;
     process.env.PUBLIC_APP_URL = 'https://landing.example.com';
     const updatedAt = new Date('2026-05-17T17:15:15.563Z');
@@ -166,11 +194,118 @@ describe('crud canonical response contract', () => {
         id: 'a',
         updated_at: '2026-05-17T17:15:15.563Z',
         meta: {
-          asset: { path: 'https://landing.example.com/storage/public/a.jpg' },
+          asset: {
+            path: {
+              path: '/storage/public/a.jpg',
+              data: '/storage/public/a.jpg',
+              url: 'https://landing.example.com/storage/public/a.jpg',
+            },
+          },
           dates: ['2026-05-17T17:15:15.563Z'],
         },
       },
     });
+  });
+
+  it('applies object conversion across create/update/delete/reorder/verify responses', async () => {
+    const previous = process.env.PUBLIC_APP_URL;
+    process.env.PUBLIC_APP_URL = 'https://landing.example.com';
+
+    const createResponse = await createModelCreateHandler(createConfig({
+      article: {
+        create: vi.fn(async () => ({ id: 'a', media: '/storage/public/a.jpg' })),
+      },
+    }))({
+      request: new Request('http://localhost/api/article/create', {
+        method: 'POST',
+        body: JSON.stringify({ title: 'A' }),
+      }),
+      params: { model },
+      locals: createLocals(),
+    } as any);
+
+    const updateResponse = await createModelUpdateHandler(createConfig({
+      article: {
+        update: vi.fn(async () => ({ id: 'a', media: '/storage/private/b.jpg' })),
+      },
+    }))({
+      request: new Request('http://localhost/api/article/update', {
+        method: 'PUT',
+        body: JSON.stringify({ id: 'a' }),
+      }),
+      params: { model },
+      locals: createLocals(),
+    } as any);
+
+    const deleteResponse = await createModelDeleteHandler(createConfig({
+      article: {
+        delete: vi.fn(async () => ({ id: 'a', media: '/storage/public/c.jpg' })),
+      },
+    }))({
+      request: new Request('http://localhost/api/article/delete', {
+        method: 'DELETE',
+        body: JSON.stringify({ id: 'a' }),
+      }),
+      params: { model },
+      locals: createLocals(),
+    } as any);
+
+    const reorderResponse = await createModelReorderHandler(createConfig(
+      {
+        article: {
+          findUnique: vi.fn(async () => ({ id: 'a', order: 1 })),
+        },
+        $transaction: vi.fn(async (cb: any) => cb({
+          article: {
+            updateMany: vi.fn(async () => ({})),
+            update: vi.fn(async () => ({ id: 'a', media: '/storage/public/d.jpg', order: 3 })),
+          },
+        })),
+      },
+      {
+        ...baseModelConfig,
+        reorder: {
+          allow: true,
+          axis: ['*'],
+          lifecycle: {
+            main: async () => ({ media: '/storage/public/d.jpg' }),
+          },
+        },
+      },
+    ))({
+      request: new Request('http://localhost/api/article/reorder', {
+        method: 'PUT',
+        body: JSON.stringify({ id: 'a', from: 1, to: 3 }),
+      }),
+      params: { model },
+      locals: createLocals(),
+    } as any);
+
+    const verifyResponse = await createModelVerifyHandler(createConfig({
+      article: {
+        findUnique: vi.fn(async () => ({ id: 'a', status_code: 'REVIEW' })),
+        update: vi.fn(async () => ({ id: 'a', status_code: 'PUBLISHED', media: '/storage/public/e.jpg' })),
+      },
+    }))({
+      request: new Request('http://localhost/api/article/verify', {
+        method: 'POST',
+        body: JSON.stringify({ id: 'a', action: 'APPROVE' }),
+      }),
+      params: { model },
+      locals: createLocals(),
+    } as any);
+
+    process.env.PUBLIC_APP_URL = previous;
+
+    for (const response of [createResponse, updateResponse, deleteResponse, reorderResponse, verifyResponse]) {
+      const body = await response.json();
+      expect(body.ok).toBe(true);
+      expect(body.data.media).toEqual({
+        path: expect.stringMatching(/^\/storage\//),
+        data: expect.stringMatching(/^\/storage\//),
+        url: expect.stringMatching(/^https:\/\/landing\.example\.com\/storage\//),
+      });
+    }
   });
 
   it('list response shape', async () => {
