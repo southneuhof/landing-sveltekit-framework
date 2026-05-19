@@ -12,6 +12,51 @@ export type LandingSection = AnyRecord & {
 
 export type SectionSchemaSlotType = 'content' | 'gallery' | 'section' | 'sectionGroup';
 
+export type SectionEditorComponentToken = string;
+export type SectionSchemaEditorInputConfig = Record<string, any>;
+
+export type SectionSchemaSlotEditorContext = {
+  slot: {
+    key: string;
+    type: SectionSchemaSlotType;
+    order: number;
+    many: boolean;
+  };
+  sectionData?: Record<string, any> | null;
+  parentSectionData?: Record<string, any> | null;
+  rootSectionData?: Record<string, any> | null;
+};
+
+export type SectionSchemaSlotEditor = {
+  label?: string;
+  fieldAliases?: Record<string, string>;
+  inputConfig?: SectionSchemaEditorInputConfig;
+  fieldsDictionary?: Record<string, unknown>;
+  fieldsParse?: Record<string, unknown>;
+  fieldsProxy?: Record<string, unknown>;
+  fieldsType?: Record<string, unknown>;
+  fieldsUnit?: Record<string, unknown>;
+  defaultValues?: Record<string, unknown>;
+  componentToken?: SectionEditorComponentToken;
+  resolveConfig?: (ctx: SectionSchemaSlotEditorContext) => SectionSchemaSlotEditorResolvedConfig;
+};
+
+export type SectionSchemaSlotEditorResolvedConfig = Omit<SectionSchemaSlotEditor, 'resolveConfig'> & {
+  fieldSet?: string;
+};
+
+export type SectionSchemaMetaEditor = {
+  inputConfig?: SectionSchemaEditorInputConfig;
+  fieldsAlias?: Record<string, string>;
+  getInitialData?: () => Promise<Record<string, unknown>>;
+};
+
+export type SectionSchemaMeta = {
+  fields?: readonly string[];
+  defaultValues?: Record<string, unknown>;
+  editor?: SectionSchemaMetaEditor;
+};
+
 export type NestedSectionSchema = {
   info?: {
     name?: string;
@@ -25,15 +70,10 @@ export type SectionSchemaSlot = {
   type: SectionSchemaSlotType;
   order: number;
   many?: boolean;
-  schema?: NestedSectionSchema;
-};
-
-export type SectionSchemaMeta = {
   fields?: readonly string[];
-  inputConfig?: Record<string, AnyRecord>;
-  fieldsAlias?: Record<string, string>;
-  defaultValues?: Record<string, unknown>;
-  getInitialData?: () => Promise<Record<string, unknown>>;
+  fieldSets?: Record<string, { fields: readonly string[] }>;
+  schema?: NestedSectionSchema;
+  editor?: SectionSchemaSlotEditor;
 };
 
 export type SectionSchema = {
@@ -41,6 +81,9 @@ export type SectionSchema = {
   info?: {
     name?: string;
     description?: string;
+  };
+  editor?: {
+    group?: string;
   };
   meta?: SectionSchemaMeta;
   data: Record<string, SectionSchemaSlot>;
@@ -61,8 +104,51 @@ export type SectionMetaField<TSchema extends SectionSchema> =
 
 export type SectionMetaValues<TSchema extends SectionSchema> = Partial<Record<SectionMetaField<TSchema>, any>>;
 
-export type LandingSectionForSchema<TSchema extends SectionSchema> = Omit<LandingSection, 'meta'> & {
+type FieldSetField<TSlot extends SectionSchemaSlot> =
+  TSlot['fieldSets'] extends Record<string, { fields: readonly (infer TField)[] }>
+    ? TField extends string
+      ? TField
+      : never
+    : never;
+
+type SlotField<TSlot extends SectionSchemaSlot> =
+  TSlot['fields'] extends readonly (infer TField)[]
+    ? TField extends string
+      ? TField | FieldSetField<TSlot>
+      : FieldSetField<TSlot>
+    : FieldSetField<TSlot>;
+
+type SlotDataValue<TSlot extends SectionSchemaSlot> = AnyRecord & Partial<Record<SlotField<TSlot>, any>>;
+
+type NestedLandingSectionForSchema<TSchema extends NestedSectionSchema> = Omit<LandingSection, 'meta' | 'data'> & {
+  meta: TSchema['meta'] extends SectionSchemaMeta
+    ? Partial<Record<Extract<TSchema['meta']['fields'] extends readonly (infer TField)[] ? TField : never, string>, any>>
+    : Record<string, any>;
+  data: {
+    [K in Extract<keyof TSchema['data'], string>]: SectionDataBySlot<TSchema['data'][K]>;
+  };
+};
+
+type SectionDataBySlot<TSlot extends SectionSchemaSlot> =
+  TSlot['type'] extends 'content' | 'gallery'
+    ? TSlot['many'] extends true
+      ? SlotDataValue<TSlot>[]
+      : SlotDataValue<TSlot>
+    : TSlot['type'] extends 'section' | 'sectionGroup'
+      ? TSlot['schema'] extends NestedSectionSchema
+        ? TSlot['many'] extends true
+          ? Array<NestedLandingSectionForSchema<TSlot['schema']>>
+          : NestedLandingSectionForSchema<TSlot['schema']>
+        : TSlot['many'] extends true
+          ? LandingSection[]
+          : LandingSection
+      : unknown;
+
+export type LandingSectionForSchema<TSchema extends SectionSchema> = Omit<LandingSection, 'meta' | 'data'> & {
   meta: SectionMetaValues<TSchema>;
+  data: {
+    [K in Extract<keyof TSchema['data'], string>]: SectionDataBySlot<TSchema['data'][K]>;
+  };
 };
 
 export type SectionDataLoader<TSection extends LandingSection = LandingSection> = (

@@ -606,9 +606,6 @@ describe('createSectionFromSchema', () => {
           code: 'content',
           meta: {
             fields: ['width_preset'],
-            inputConfig: {
-              width_preset: { type: 'select' },
-            },
             defaultValues: {
               width_preset: 'md',
             },
