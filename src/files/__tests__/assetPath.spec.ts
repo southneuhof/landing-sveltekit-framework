@@ -40,6 +40,17 @@ describe('asset path utilities', () => {
     expect(normalizeFileUploadValue('')).toBe('');
   });
 
+  it('does not collapse non-file objects that happen to have url fields', () => {
+    expect(
+      normalizeFileUploadValue({
+        id: 'content-1',
+        title: 'Example',
+        url: 'https://google.com',
+        cta: 'https://google.com',
+      }),
+    ).toBeUndefined();
+  });
+
   it('expands public URL when base URL exists', () => {
     expect(toPublicAssetUrl('/storage/public/a.jpg', 'https://hkr.test')).toBe('https://hkr.test/storage/public/a.jpg');
   });

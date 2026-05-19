@@ -88,9 +88,26 @@ export function normalizeFileUploadValue(value: unknown): string | null | undefi
   }
 
   const url = record.url;
-  if (typeof url === 'string') {
+  if (typeof url === 'string' && isLikelyUploadObject(record)) {
     return toStoredAssetPath(url);
   }
 
   return undefined;
+}
+
+function isLikelyUploadObject(record: Record<string, unknown>): boolean {
+  const keys = Object.keys(record);
+  if (keys.length === 0) return false;
+  const allowedKeys = new Set([
+    'url',
+    'success',
+    'filename',
+    'name',
+    'size',
+    'type',
+    'mime',
+    'contentType',
+  ]);
+
+  return keys.every((key) => allowedKeys.has(key));
 }

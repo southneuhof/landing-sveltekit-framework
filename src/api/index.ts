@@ -319,12 +319,16 @@ export function createModelCreateHandler(config: HandlerConfig) {
 export function createModelUpdateHandler(config: HandlerConfig) {
   return async function PUT(event: any) {
     try {
+      // console.log('PUT event:', event);
       const modelConfig = await resolveModelConfig(config.modelConfigs, event.params.model);
       assertModel(config.prisma, event.params.model);
       const mergedConfig = mergeUpdateConfigs(modelConfig, modelConfig.create, modelConfig.update);
       if (!mergedConfig.allow) throw new Error('Operation forbidden');
 
       let body = await event.request.json();
+
+      console.log('PUT body 1:', body);
+
       await authorize(config, event, event.params.model, 'update', mergedConfig, body);
       if (mergedConfig.validation) await validateFields(body, mergedConfig.validation);
 
@@ -347,6 +351,8 @@ export function createModelUpdateHandler(config: HandlerConfig) {
           deleteReplacedFiles: true,
         });
       }
+
+      console.log('PUT body 2:', body);
 
       if (mergedConfig.lifecycle?.pre) body = await mergedConfig.lifecycle.pre(body, event.locals);
       let data = mergedConfig.lifecycle?.main
