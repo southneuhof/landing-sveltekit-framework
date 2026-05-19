@@ -226,6 +226,57 @@ function coerceIdentityValue(value: string, prismaType?: string) {
   return value;
 }
 
+function buildWriteIdentityObject(
+  prisma: any,
+  modelName: string,
+  identityKeys: string[],
+  body: AnyRecord,
+) {
+  return Object.fromEntries(
+    identityKeys.map((field) => [field, coercePrismaFieldValue(body[field], getPrismaFieldType(prisma, modelName, field))]),
+  );
+}
+
+function buildWriteData(
+  prisma: any,
+  modelName: string,
+  fields: string[] | undefined,
+  body: AnyRecord,
+): AnyRecord {
+  return normalizePrismaWritePayload(prisma, modelName, filterWritePayloadByFields(fields, body));
+}
+
+function normalizePrismaWritePayload(prisma: any, modelName: string, payload: AnyRecord): AnyRecord {
+  return Object.fromEntries(
+    Object.entries(payload).map(([field, value]) => [
+      field,
+      coercePrismaFieldValue(value, getPrismaFieldType(prisma, modelName, field)),
+    ]),
+  );
+}
+
+function getPrismaFieldType(prisma: any, modelName: string, fieldName: string): string | undefined {
+  return getPrismaModelMeta(prisma, modelName)?.fields?.find((field: any) => field.name === fieldName)?.type;
+}
+
+function coercePrismaFieldValue(value: unknown, prismaType?: string): unknown {
+  if (prismaType === 'DateTime') return coerceDateTimeValue(value);
+  return value;
+}
+
+function coerceDateTimeValue(value: unknown): unknown {
+  if (value instanceof Date || typeof value !== 'string') return value;
+
+  const trimmed = value.trim();
+  const dateOnlyMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(trimmed);
+  if (dateOnlyMatch) return `${dateOnlyMatch[1]}-${dateOnlyMatch[2]}-${dateOnlyMatch[3]}T00:00:00.000Z`;
+
+  const dateTimeWithoutZoneMatch = /^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?)$/.exec(trimmed);
+  if (dateTimeWithoutZoneMatch) return `${dateTimeWithoutZoneMatch[1]}T${dateTimeWithoutZoneMatch[2]}Z`;
+
+  return value;
+}
+
 export function createModelCreateHandler(config: HandlerConfig) {
   return async function POST(event: any) {
     try {
@@ -253,7 +304,7 @@ export function createModelCreateHandler(config: HandlerConfig) {
       let data = mergedConfig.lifecycle?.main
         ? await mergedConfig.lifecycle.main(body, event.locals)
         : await config.prisma[event.params.model].create({
-            data: filterWritePayloadByFields(mergedConfig.fields, body),
+            data: buildWriteData(config.prisma, event.params.model, mergedConfig.fields, body),
           });
       if (mergedConfig.lifecycle?.post) data = await mergedConfig.lifecycle.post(body, data, event.locals);
       data = expandAdminAssetUrls(data);
@@ -279,7 +330,7 @@ export function createModelUpdateHandler(config: HandlerConfig) {
 
       const customWhereObject = mergedConfig.where ? await mergedConfig.where(event) : undefined;
       const whereClause = {
-        ...Object.fromEntries((mergedConfig.by ?? []).map((key) => [key, body[key]])),
+        ...buildWriteIdentityObject(config.prisma, event.params.model, mergedConfig.by ?? [], body),
         ...(customWhereObject ? buildWhereClause(customWhereObject) : undefined),
       };
 
@@ -302,7 +353,7 @@ export function createModelUpdateHandler(config: HandlerConfig) {
         ? await mergedConfig.lifecycle.main(body, event.locals)
         : await config.prisma[event.params.model].update({
             where: whereClause,
-            data: filterWritePayloadByFields(mergedConfig.fields, body),
+            data: buildWriteData(config.prisma, event.params.model, mergedConfig.fields, body),
           });
       if (mergedConfig.lifecycle?.post) data = await mergedConfig.lifecycle.post(body, data, event.locals);
       data = expandAdminAssetUrls(data);
@@ -326,7 +377,7 @@ export function createModelDeleteHandler(config: HandlerConfig) {
       await authorize(config, event, event.params.model, 'delete', mergedConfig, body);
       const customWhereObject = mergedConfig.where ? await mergedConfig.where(event) : undefined;
       const whereClause = {
-        ...Object.fromEntries((mergedConfig.by ?? []).map((key) => [key, body[key]])),
+        ...buildWriteIdentityObject(config.prisma, event.params.model, mergedConfig.by ?? [], body),
         ...(customWhereObject ? buildWhereClause(customWhereObject) : undefined),
       };
 
@@ -419,12 +470,13 @@ export function createModelVerifyHandler(config: HandlerConfig) {
       if (mergedConfig.lifecycle?.main) {
         data = await mergedConfig.lifecycle.main(body, event.locals, { [by]: body[by] });
       } else {
-        const record = await config.prisma[event.params.model].findUnique({ where: { [by]: body[by] } });
+        const where = buildWriteIdentityObject(config.prisma, event.params.model, [by], body);
+        const record = await config.prisma[event.params.model].findUnique({ where });
         if (!record) throw new Error('Record not found.');
         const allowedFromStates = Array.isArray(transition.from) ? transition.from : [transition.from];
         if (!allowedFromStates.includes(record[mergedConfig.stateField as string])) throw new Error('Action is not allowed from current state.');
         data = await config.prisma[event.params.model].update({
-          where: { [by]: body[by] },
+          where,
           data: { [mergedConfig.stateField as string]: transition.to },
         });
       }

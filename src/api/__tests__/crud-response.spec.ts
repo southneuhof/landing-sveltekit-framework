@@ -438,6 +438,65 @@ describe('crud canonical response contract', () => {
     });
   });
 
+  it('coerces DateTime write fields from date inputs before calling prisma', async () => {
+    const prismaCreate = vi.fn(async () => ({
+      id: 'a',
+      created_at: new Date('2026-05-19T00:00:00.000Z'),
+    }));
+    const response = await createModelCreateHandler(createConfig(
+      {
+        _runtimeDataModel: {
+          models: {
+            article: {
+              fields: [
+                { name: 'id', type: 'String' },
+                { name: 'created_at', type: 'DateTime' },
+                { name: 'categories', type: 'ArticleCategory' },
+              ],
+            },
+          },
+        },
+        article: { create: prismaCreate },
+      },
+      {
+        ...baseModelConfig,
+        types: {
+          categories: {
+            type: 'multi',
+            params: { by: 'id' },
+          },
+        },
+        create: { allow: true, fields: ['categories', 'created_at'] },
+      },
+    ))({
+      request: new Request('http://localhost/api/article/create', {
+        method: 'POST',
+        body: JSON.stringify({
+          categories: [
+            { id: 'cmpc7o07y0009s685v5g3fuxt', name: 'Promosi' },
+            { id: 'cmpc7nzvf0003s685zwz1uhdr', name: 'Publikasi' },
+          ],
+          created_at: '2026-05-19',
+        }),
+      }),
+      params: { model },
+      locals: createLocals(),
+    } as any);
+
+    expect(response.status).toBe(201);
+    expect(prismaCreate).toHaveBeenCalledWith({
+      data: {
+        categories: {
+          connect: [
+            { id: 'cmpc7o07y0009s685v5g3fuxt' },
+            { id: 'cmpc7nzvf0003s685zwz1uhdr' },
+          ],
+        },
+        created_at: '2026-05-19T00:00:00.000Z',
+      },
+    });
+  });
+
   it('passes request input to model authorize hooks', async () => {
     const authorize = vi.fn();
     const response = await createModelCreateHandler(createConfig(
