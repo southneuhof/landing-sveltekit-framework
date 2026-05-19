@@ -521,8 +521,7 @@ async function authorize(
   await authorizeOperation(event, model, operation, {
     permission: operationConfig.permission,
     authorize: operationConfig.authorize,
-    input,
-  } as any);
+  } as any, input);
 }
 
 export const createModelAPI = createModelApi;

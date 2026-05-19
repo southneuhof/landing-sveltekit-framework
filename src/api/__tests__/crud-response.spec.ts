@@ -197,6 +197,31 @@ describe('crud canonical response contract', () => {
     });
   });
 
+  it('passes request input to model authorize hooks', async () => {
+    const authorize = vi.fn();
+    const response = await createModelCreateHandler(createConfig(
+      {
+        article: {
+          create: vi.fn(async () => ({ id: 'a', title: 'A' })),
+        },
+      },
+      {
+        ...baseModelConfig,
+        create: { allow: true, authorize },
+      },
+    ))({
+      request: new Request('http://localhost/api/article/create', {
+        method: 'POST',
+        body: JSON.stringify({ title: 'A' }),
+      }),
+      params: { model },
+      locals: createLocals(),
+    } as any);
+
+    expect(response.status).toBe(201);
+    expect(authorize).toHaveBeenCalledWith(expect.anything(), { title: 'A' });
+  });
+
   it('create and update pass full body when fields are not configured', async () => {
     const prismaCreate = vi.fn(async () => ({ id: 'a', title: 'A' }));
     const prismaUpdate = vi.fn(async () => ({ id: 'a', title: 'A2' }));
