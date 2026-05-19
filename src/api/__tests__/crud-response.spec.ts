@@ -48,6 +48,131 @@ function createLocals() {
 }
 
 describe('crud canonical response contract', () => {
+  it('expands storage asset URLs in admin responses when PUBLIC_APP_URL is set', async () => {
+    const previous = process.env.PUBLIC_APP_URL;
+    process.env.PUBLIC_APP_URL = 'https://landing.example.com';
+
+    const response = await createModelDetailHandler(createConfig({
+      article: {
+        fields: { id: true, media: true, attachment: true, meta: true, icon: true },
+        findFirst: vi.fn(async () => ({
+          id: 'a',
+          media: '/storage/public/a.jpg',
+          attachment: 'https://old-host.com/storage/private/doc.pdf',
+          icon: 'ri-home-line',
+          meta: {
+            nested: [
+              { path: '/storage/public/nested.png' },
+              { url: '/storage/private/inner.pdf' },
+            ],
+          },
+        })),
+      },
+    }))({
+      request: new Request('http://localhost/api/article/a/show'),
+      url: new URL('http://localhost/api/article/a/show'),
+      params: { model, identity: 'a' },
+      locals: createLocals(),
+    } as any);
+
+    process.env.PUBLIC_APP_URL = previous;
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      ok: true,
+      data: {
+        id: 'a',
+        media: 'https://landing.example.com/storage/public/a.jpg',
+        attachment: 'https://landing.example.com/storage/private/doc.pdf',
+        icon: 'ri-home-line',
+        meta: {
+          nested: [
+            { path: 'https://landing.example.com/storage/public/nested.png' },
+            { url: 'https://landing.example.com/storage/private/inner.pdf' },
+          ],
+        },
+      },
+    });
+  });
+
+  it('keeps external URLs and uses canonical paths when PUBLIC_APP_URL is missing', async () => {
+    const previous = process.env.PUBLIC_APP_URL;
+    delete process.env.PUBLIC_APP_URL;
+
+    const response = await createModelDetailHandler(createConfig({
+      article: {
+        fields: { id: true, media: true, source: true, meta: true },
+        findFirst: vi.fn(async () => ({
+          id: 'a',
+          media: 'https://old-host.com/storage/public/a.jpg',
+          source: 'https://youtube.com/watch?v=x',
+          meta: {
+            data: '/storage/private/file.pdf',
+            contact: 'mailto:test@example.com',
+          },
+        })),
+      },
+    }))({
+      request: new Request('http://localhost/api/article/a/show'),
+      url: new URL('http://localhost/api/article/a/show'),
+      params: { model, identity: 'a' },
+      locals: createLocals(),
+    } as any);
+
+    process.env.PUBLIC_APP_URL = previous;
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      ok: true,
+      data: {
+        id: 'a',
+        media: '/storage/public/a.jpg',
+        source: 'https://youtube.com/watch?v=x',
+        meta: {
+          data: '/storage/private/file.pdf',
+          contact: 'mailto:test@example.com',
+        },
+      },
+    });
+  });
+
+  it('preserves non-plain response objects while normalizing nested plain records', async () => {
+    const previous = process.env.PUBLIC_APP_URL;
+    process.env.PUBLIC_APP_URL = 'https://landing.example.com';
+    const updatedAt = new Date('2026-05-17T17:15:15.563Z');
+
+    const response = await createModelDetailHandler(createConfig({
+      article: {
+        fields: { id: true, updated_at: true, meta: true },
+        findFirst: vi.fn(async () => ({
+          id: 'a',
+          updated_at: updatedAt,
+          meta: {
+            asset: { path: '/storage/public/a.jpg' },
+            dates: [updatedAt],
+          },
+        })),
+      },
+    }))({
+      request: new Request('http://localhost/api/article/a/show'),
+      url: new URL('http://localhost/api/article/a/show'),
+      params: { model, identity: 'a' },
+      locals: createLocals(),
+    } as any);
+
+    process.env.PUBLIC_APP_URL = previous;
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      ok: true,
+      data: {
+        id: 'a',
+        updated_at: '2026-05-17T17:15:15.563Z',
+        meta: {
+          asset: { path: 'https://landing.example.com/storage/public/a.jpg' },
+          dates: ['2026-05-17T17:15:15.563Z'],
+        },
+      },
+    });
+  });
+
   it('list response shape', async () => {
     const response = await createModelListHandler(createConfig({
       article: {

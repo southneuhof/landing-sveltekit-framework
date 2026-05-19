@@ -13,6 +13,7 @@ import { withPagination } from '../utils/pagination.js';
 import { reorderEntries } from '../utils/reorder.js';
 import { exception, success } from '../utils/response.js';
 import type { FileManager } from '../files/index.js';
+import { toPublicAssetUrl, toStoredAssetPath } from '../files/assetPath.js';
 
 export type HandlerConfig = {
   prisma: any;
@@ -112,7 +113,7 @@ export function createModelListHandler(config: HandlerConfig) {
         }
 
         return {
-          data: applyCustomFields(finalData, mergedConfig.customFields),
+          data: expandAdminAssetUrls(applyCustomFields(finalData, mergedConfig.customFields)),
           total: result.total,
         };
       }, paginationOptions);
@@ -169,7 +170,7 @@ export function createModelDetailHandler(config: HandlerConfig) {
         data = await mergedConfig.lifecycle.post(data, undefined, event.locals);
       }
 
-      data = applyCustomFields(data, mergedConfig.customFields);
+      data = expandAdminAssetUrls(applyCustomFields(data, mergedConfig.customFields));
       return success(data, { status: 200 });
     } catch (err) {
       return exception(err);
@@ -255,6 +256,7 @@ export function createModelCreateHandler(config: HandlerConfig) {
             data: filterWritePayloadByFields(mergedConfig.fields, body),
           });
       if (mergedConfig.lifecycle?.post) data = await mergedConfig.lifecycle.post(body, data, event.locals);
+      data = expandAdminAssetUrls(data);
 
       return success(data, { status: 201 });
     } catch (err) {
@@ -303,6 +305,7 @@ export function createModelUpdateHandler(config: HandlerConfig) {
             data: filterWritePayloadByFields(mergedConfig.fields, body),
           });
       if (mergedConfig.lifecycle?.post) data = await mergedConfig.lifecycle.post(body, data, event.locals);
+      data = expandAdminAssetUrls(data);
 
       return success(data, { status: 200 });
     } catch (err) {
@@ -339,6 +342,7 @@ export function createModelDeleteHandler(config: HandlerConfig) {
         ? await mergedConfig.lifecycle.main(body, event.locals)
         : await config.prisma[event.params.model].delete({ where: whereClause });
       if (mergedConfig.lifecycle?.post) data = await mergedConfig.lifecycle.post(body, data, event.locals);
+      data = expandAdminAssetUrls(data);
 
       if (config.files) {
         const urls = config.files.collectFileUrls(previousData ?? data);
@@ -385,6 +389,7 @@ export function createModelReorderHandler(config: HandlerConfig) {
             axis: mergedConfig.axis,
           });
       if (mergedConfig.lifecycle?.post) data = await mergedConfig.lifecycle.post(body, data, event.locals);
+      data = expandAdminAssetUrls(data);
 
       return success(data, { status: 200 });
     } catch (err) {
@@ -424,6 +429,7 @@ export function createModelVerifyHandler(config: HandlerConfig) {
         });
       }
       if (mergedConfig.lifecycle?.post) data = await mergedConfig.lifecycle.post(body, data, event.locals);
+      data = expandAdminAssetUrls(data);
 
       return success(data, { status: 200 });
     } catch (err) {
@@ -588,3 +594,54 @@ async function authorize(
 }
 
 export const createModelAPI = createModelApi;
+
+function expandAdminAssetUrls<T>(input: T): T {
+  const baseUrl = resolveAssetBaseUrl();
+  return transformAssetValue(input, baseUrl) as T;
+}
+
+function resolveAssetBaseUrl(): string | undefined {
+  const value = process.env.PUBLIC_APP_URL?.trim();
+  if (!value) return undefined;
+  try {
+    return new URL(value).toString();
+  } catch {
+    return undefined;
+  }
+}
+
+function transformAssetValue(value: unknown, baseUrl?: string): unknown {
+  if (typeof value === 'string') {
+    return normalizeAssetString(value, baseUrl);
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) => transformAssetValue(item, baseUrl));
+  }
+
+  if (!isPlainRecord(value)) {
+    return value;
+  }
+
+  const output: Record<string, unknown> = {};
+  for (const [key, child] of Object.entries(value)) {
+    if ((key === 'path' || key === 'url' || key === 'data') && typeof child === 'string') {
+      output[key] = normalizeAssetString(child, baseUrl);
+      continue;
+    }
+    output[key] = transformAssetValue(child, baseUrl);
+  }
+  return output;
+}
+
+function normalizeAssetString(value: string, baseUrl?: string): string {
+  const normalized = toStoredAssetPath(value);
+  if (!normalized.startsWith('/storage/')) return value;
+  return toPublicAssetUrl(normalized, baseUrl);
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  if (!value || typeof value !== 'object') return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
