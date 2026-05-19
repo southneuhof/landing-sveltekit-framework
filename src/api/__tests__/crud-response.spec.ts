@@ -78,15 +78,16 @@ describe('crud canonical response contract', () => {
   });
 
   it('detail response shape', async () => {
+    const findFirst = vi.fn(async () => ({ id: 'a', title: 'A' }));
     const response = await createModelDetailHandler(createConfig({
       article: {
         fields: { id: true, title: true },
-        findFirst: vi.fn(async () => ({ id: 'a', title: 'A' })),
+        findFirst,
       },
     }))({
-      request: new Request('http://localhost/api/article/detail?id=a'),
-      url: new URL('http://localhost/api/article/detail?id=a'),
-      params: { model },
+      request: new Request('http://localhost/api/article/a/show'),
+      url: new URL('http://localhost/api/article/a/show'),
+      params: { model, identity: 'a' },
       locals: createLocals(),
     } as any);
 
@@ -95,6 +96,121 @@ describe('crud canonical response contract', () => {
       ok: true,
       data: { id: 'a', title: 'A' },
     });
+    expect(findFirst).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'a' },
+    }));
+  });
+
+  it('detail maps composite identity segments by detail.by order', async () => {
+    const findFirst = vi.fn(async () => ({ article_id: '123', language: 'id' }));
+    const response = await createModelDetailHandler(createConfig(
+      {
+        article: {
+          fields: { article_id: true, language: true },
+          findFirst,
+        },
+      },
+      {
+        ...baseModelConfig,
+        detail: { allow: true, by: ['article_id', 'language'] },
+      },
+    ))({
+      request: new Request('http://localhost/api/article/123/id/show'),
+      url: new URL('http://localhost/api/article/123/id/show'),
+      params: { model, identity: '123/id' },
+      locals: createLocals(),
+    } as any);
+
+    expect(response.status).toBe(200);
+    expect(findFirst).toHaveBeenCalledWith(expect.objectContaining({
+      where: { article_id: '123', language: 'id' },
+    }));
+  });
+
+  it('detail rejects missing identity segments', async () => {
+    const response = await createModelDetailHandler(createConfig({
+      article: {
+        fields: { id: true, title: true },
+        findFirst: vi.fn(async () => ({ id: 'a', title: 'A' })),
+      },
+    }))({
+      request: new Request('http://localhost/api/article/show'),
+      url: new URL('http://localhost/api/article/show'),
+      params: { model, identity: '' },
+      locals: createLocals(),
+    } as any);
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: {
+        message: 'Invalid identity segment count: expected 1, received 0',
+      },
+    });
+  });
+
+  it('detail rejects extra identity segments', async () => {
+    const response = await createModelDetailHandler(createConfig({
+      article: {
+        fields: { id: true, title: true },
+        findFirst: vi.fn(async () => ({ id: 'a', title: 'A' })),
+      },
+    }))({
+      request: new Request('http://localhost/api/article/123/extra/show'),
+      url: new URL('http://localhost/api/article/123/extra/show'),
+      params: { model, identity: '123/extra' },
+      locals: createLocals(),
+    } as any);
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      ok: false,
+      error: {
+        message: 'Invalid identity segment count: expected 1, received 2',
+      },
+    });
+  });
+
+  it('detail does not use query params for identity resolution', async () => {
+    const findFirst = vi.fn(async () => ({ id: 'a', title: 'A' }));
+    const response = await createModelDetailHandler(createConfig({
+      article: {
+        fields: { id: true, title: true },
+        findFirst,
+      },
+    }))({
+      request: new Request('http://localhost/api/article/show?id=123'),
+      url: new URL('http://localhost/api/article/show?id=123'),
+      params: { model, identity: '' },
+      locals: createLocals(),
+    } as any);
+
+    expect(response.status).toBe(400);
+    expect(findFirst).not.toHaveBeenCalled();
+  });
+
+  it('detail authorize receives identity object from path segments', async () => {
+    const authorize = vi.fn();
+    const response = await createModelDetailHandler(createConfig(
+      {
+        article: {
+          fields: { article_id: true, language: true },
+          findFirst: vi.fn(async () => ({ article_id: '123', language: 'id' })),
+        },
+      },
+      {
+        ...baseModelConfig,
+        detail: { allow: true, by: ['article_id', 'language'], authorize },
+      },
+    ))({
+      request: new Request('http://localhost/api/article/123/id/show'),
+      url: new URL('http://localhost/api/article/123/id/show'),
+      params: { model, identity: '123/id' },
+      locals: createLocals(),
+    } as any);
+
+    expect(response.status).toBe(200);
+    expect(authorize).toHaveBeenCalledWith(expect.anything(), { article_id: '123', language: 'id' });
   });
 
   it('create response shape and status', async () => {

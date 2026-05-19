@@ -135,11 +135,26 @@ export function createModelDetailHandler(config: HandlerConfig) {
       const mergedConfig = mergeDetailConfigs(modelConfig, modelConfig.detail);
       if (!mergedConfig.allow) throw new Error('Operation forbidden');
 
-      const urlSearchParams = parseSearchParams(event.url.searchParams);
-      await authorize(config, event, event.params.model, 'detail', mergedConfig, urlSearchParams);
+      const identityKeys = mergedConfig.by ?? [];
+      const rawIdentity = typeof event.params.identity === 'string'
+        ? event.params.identity
+        : Array.isArray(event.params.identity)
+          ? event.params.identity.join('/')
+          : '';
+      const identitySegments = rawIdentity
+        .split('/')
+        .map((segment: string) => segment.trim())
+        .filter(Boolean);
+
+      if (identitySegments.length !== identityKeys.length) {
+        throw new Error(`Invalid identity segment count: expected ${identityKeys.length}, received ${identitySegments.length}`);
+      }
+
+      const identity = buildIdentityObject(config.prisma, event.params.model, identityKeys, identitySegments);
+      await authorize(config, event, event.params.model, 'detail', mergedConfig, identity);
       const customWhereObject = mergedConfig.where ? await mergedConfig.where(event) : undefined;
       const whereClause = {
-        ...Object.fromEntries((mergedConfig.by ?? []).map((field) => urlSearchParams[field] ? [field, urlSearchParams[field]] : undefined).filter(Boolean) as any),
+        ...identity,
         ...(customWhereObject ? buildWhereClause(customWhereObject) : undefined),
       };
 
@@ -160,6 +175,54 @@ export function createModelDetailHandler(config: HandlerConfig) {
       return exception(err);
     }
   };
+}
+
+function buildIdentityObject(
+  prisma: any,
+  modelName: string,
+  identityKeys: string[],
+  identitySegments: string[],
+) {
+  const modelMeta = getPrismaModelMeta(prisma, modelName);
+
+  return Object.fromEntries(
+    identityKeys.map((field, index) => {
+      const rawValue = identitySegments[index];
+      const prismaType = modelMeta?.fields?.find((metaField: any) => metaField.name === field)?.type;
+      return [field, coerceIdentityValue(rawValue, prismaType)];
+    }),
+  );
+}
+
+function getPrismaModelMeta(prisma: any, modelName: string) {
+  const models = prisma?._runtimeDataModel?.models;
+  if (!models || typeof models !== 'object') return undefined;
+
+  const direct = models[modelName];
+  if (direct) return direct;
+
+  const fallbackKey = Object.keys(models).find((key) => key.toLowerCase() === String(modelName).toLowerCase());
+  return fallbackKey ? models[fallbackKey] : undefined;
+}
+
+function coerceIdentityValue(value: string, prismaType?: string) {
+  if (!prismaType) return value;
+
+  if (prismaType === 'Int') {
+    const parsed = Number.parseInt(value, 10);
+    if (Number.isNaN(parsed)) throw new Error(`Invalid integer identity value: "${value}"`);
+    return parsed;
+  }
+
+  if (prismaType === 'BigInt') {
+    try {
+      return BigInt(value);
+    } catch {
+      throw new Error(`Invalid bigint identity value: "${value}"`);
+    }
+  }
+
+  return value;
 }
 
 export function createModelCreateHandler(config: HandlerConfig) {
