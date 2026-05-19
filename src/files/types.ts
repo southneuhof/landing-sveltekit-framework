@@ -94,6 +94,7 @@ export type FileManagerConfig = {
     allowedVisibilities?: string[];
     defaultVisibility?: string;
     maxFileSizeBytes?: number;
+    publicBaseUrl?: string;
   };
 };
 

@@ -49,11 +49,12 @@ describe('file manager', () => {
     expect(() => resolveLocalStoragePath(root, '../secret.txt')).toThrow('Invalid storage path');
   });
 
-  it('uploads a temp file and returns its URL', async () => {
+  it('upload handler returns path/url/data object and relative path', async () => {
     const root = await createTempRoot();
     const manager = createFileManager({
       storage: createLocalFileStorageDriver({ root }),
       locations: createStorageUrlLocationStrategy(),
+      upload: { publicBaseUrl: 'https://landing.example.com' },
     });
     const handler = manager.createUploadHandler();
     const formData = new FormData();
@@ -69,8 +70,11 @@ describe('file manager', () => {
     } as any);
 
     expect(response.status).toBe(200);
-    const url = await response.json();
-    expect(url).toMatch(/^http:\/\/localhost\/storage\/temp\/private\/\d+-hello\.txt$/);
+    const payload = await response.json();
+    expect(payload.success).toBe(true);
+    expect(payload.path).toMatch(/^\/storage\/temp\/private\/\d+-hello\.txt$/);
+    expect(payload.data).toBe(payload.path);
+    expect(payload.url).toBe(`https://landing.example.com${payload.path}`);
   });
 
   it('promotes nested temp URLs and deletes replaced files', async () => {
@@ -88,7 +92,7 @@ describe('file manager', () => {
     const deleteSpy = vi.spyOn(storage, 'delete');
 
     const result = await manager.processPayloadFiles(
-      { media: '/storage/temp/private/new.txt' },
+      { media: { path: '/storage/temp/private/new.txt', url: 'https://old-host.com/storage/temp/private/new.txt' } },
       {
         previousData: { media: '/storage/private/old.txt' },
         deleteReplacedFiles: true,
@@ -98,6 +102,42 @@ describe('file manager', () => {
     expect(result).toEqual({ media: '/storage/private/new.txt' });
     await expect(readFile(join(root, 'private/new.txt'), 'utf8')).resolves.toBe('new');
     expect(deleteSpy).toHaveBeenCalledWith(expect.objectContaining({ key: 'private/old.txt' }));
+  });
+
+  it('promotes absolute old temp URL to relative permanent path', async () => {
+    const root = await createTempRoot();
+    const manager = createFileManager({
+      storage: createLocalFileStorageDriver({ root }),
+      locations: createStorageUrlLocationStrategy(),
+    });
+
+    await mkdir(join(root, 'temp/public'), { recursive: true });
+    await writeFile(join(root, 'temp/public/tmp.txt'), 'x');
+
+    const promoted = await manager.promoteTempFile('https://old-host.com/storage/temp/public/tmp.txt');
+    expect(promoted).toBe('/storage/public/tmp.txt');
+  });
+
+  it('delete and collect accept absolute and relative storage URLs', async () => {
+    const root = await createTempRoot();
+    const storage = createLocalFileStorageDriver({ root });
+    const manager = createFileManager({
+      storage,
+      locations: createStorageUrlLocationStrategy(),
+    });
+
+    await mkdir(join(root, 'public'), { recursive: true });
+    await writeFile(join(root, 'public/a.txt'), 'a');
+    await manager.deleteFile('https://old-host.com/storage/public/a.txt');
+
+    const urls = manager.collectFileUrls({
+      one: '/storage/public/a.txt',
+      two: 'https://old-host.com/storage/public/b.txt',
+      three: 'https://youtube.com/watch?v=x',
+    });
+    expect(urls).toContain('/storage/public/a.txt');
+    expect(urls).toContain('/storage/public/b.txt');
+    expect(urls).not.toContain('https://youtube.com/watch?v=x');
   });
 
   it('processes images, stores metadata, and exposes a manifest', async () => {

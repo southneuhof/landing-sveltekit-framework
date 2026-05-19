@@ -1,5 +1,6 @@
 import { basename, dirname, join } from 'node:path';
-import type { FileLocationStrategy, FileObject } from './types.js';
+import { toPublicAssetUrl } from './assetPath.js';
+import type { FileLocationStrategy } from './types.js';
 
 export type StorageUrlLocationStrategyConfig = {
   publicBaseUrl?: string;
@@ -13,21 +14,28 @@ export function createStorageUrlLocationStrategy(config: StorageUrlLocationStrat
 
   return {
     fromUrl(url) {
-      const parsed = new URL(url, config.publicBaseUrl ?? 'http://localhost');
+      const parsed = new URL(url, 'http://localhost');
       if (!parsed.pathname.startsWith(`${basePath}/`)) return null;
 
       const key = decodeURIComponent(parsed.pathname.slice(basePath.length + 1));
       if (!key) return null;
       const segments = key.split('/');
       const visibility = segments[0] === 'temp' ? segments[1] : segments[0];
-      const publicBaseUrl = config.publicBaseUrl ?? (isAbsoluteUrl(url) ? parsed.origin : undefined);
+      const canonicalUrl = toStorageUrl(key, basePath);
+      const metadata: Record<string, unknown> = {};
+
+      if (config.publicBaseUrl) {
+        metadata.publicUrl = toPublicAssetUrl(canonicalUrl, config.publicBaseUrl);
+      } else if (isAbsoluteUrl(url)) {
+        metadata.publicUrl = toPublicAssetUrl(canonicalUrl, parsed.origin);
+      }
 
       return {
         key,
-        url: toStorageUrl(key, basePath, publicBaseUrl),
+        url: canonicalUrl,
         filename: basename(key),
         visibility,
-        metadata: publicBaseUrl ? { publicBaseUrl } : undefined,
+        metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
       };
     },
     isTemp(file) {
@@ -37,37 +45,50 @@ export function createStorageUrlLocationStrategy(config: StorageUrlLocationStrat
       const visibility = input.visibility || defaultVisibility;
       const filename = safeFilename(input.filename);
       const key = join('temp', visibility, `${Date.now()}-${filename}`);
+      const url = toStorageUrl(key, basePath);
       return {
         key,
-        url: toStorageUrl(key, basePath, config.publicBaseUrl ?? input.requestUrl.origin),
+        url,
         filename: basename(key),
         contentType: input.contentType,
         visibility,
-        metadata: { publicBaseUrl: config.publicBaseUrl ?? input.requestUrl.origin },
+        metadata: {
+          publicUrl: toPublicAssetUrl(url, config.publicBaseUrl ?? input.requestUrl.origin),
+        },
       };
     },
     toPermanent(tempFile) {
       const key = tempFile.key.replace(/^temp\//, '');
-      const publicBaseUrl = typeof tempFile.metadata?.publicBaseUrl === 'string'
+      const url = toStorageUrl(key, basePath);
+      const baseForPublicUrl = typeof tempFile.metadata?.publicBaseUrl === 'string'
         ? tempFile.metadata.publicBaseUrl
         : config.publicBaseUrl;
       return {
         ...tempFile,
         key,
-        url: toStorageUrl(key, basePath, publicBaseUrl),
+        url,
         filename: basename(key),
+        metadata: {
+          ...tempFile.metadata,
+          ...(baseForPublicUrl ? { publicUrl: toPublicAssetUrl(url, baseForPublicUrl) } : {}),
+        },
       };
     },
     derivativeFor(source, filename) {
       const key = join(dirname(source.key), filename);
-      const publicBaseUrl = typeof source.metadata?.publicBaseUrl === 'string'
+      const url = toStorageUrl(key, basePath);
+      const baseForPublicUrl = typeof source.metadata?.publicBaseUrl === 'string'
         ? source.metadata.publicBaseUrl
         : config.publicBaseUrl;
       return {
         ...source,
         key,
-        url: toStorageUrl(key, basePath, publicBaseUrl),
+        url,
         filename,
+        metadata: {
+          ...source.metadata,
+          ...(baseForPublicUrl ? { publicUrl: toPublicAssetUrl(url, baseForPublicUrl) } : {}),
+        },
       };
     },
   };
@@ -77,9 +98,8 @@ export function safeFilename(filename: string): string {
   return filename.replace(/[^a-zA-Z0-9._-]/g, '_');
 }
 
-function toStorageUrl(key: string, basePath: string, publicBaseUrl?: string): string {
-  const path = `${basePath}/${encodeKey(key)}`;
-  return publicBaseUrl ? new URL(path, publicBaseUrl).toString() : path;
+function toStorageUrl(key: string, basePath: string): string {
+  return `${basePath}/${encodeKey(key)}`;
 }
 
 function encodeKey(key: string): string {

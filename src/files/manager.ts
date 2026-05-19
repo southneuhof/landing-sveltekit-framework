@@ -1,5 +1,10 @@
 import { json, type RequestHandler } from '@sveltejs/kit';
 import { lookup } from 'mime-types';
+import {
+  normalizeFileUploadValue,
+  toPublicAssetUrl,
+  toStoredAssetPath,
+} from './assetPath.js';
 import type {
   FileManager,
   FileManagerConfig,
@@ -17,8 +22,9 @@ export function createFileManager(config: FileManagerConfig): FileManager {
   };
 
   async function promoteTempFile(url: string): Promise<string> {
-    const source = config.locations.fromUrl(url);
-    if (!source || !config.locations.isTemp(source)) return url;
+    const normalizedInput = toStoredAssetPath(url);
+    const source = config.locations.fromUrl(normalizedInput);
+    if (!source || !config.locations.isTemp(source)) return normalizedInput;
 
     const bytes = await config.storage.read(source);
     const sourceWithContentType = {
@@ -31,11 +37,11 @@ export function createFileManager(config: FileManagerConfig): FileManager {
     if (!matchingProcessor) {
       if (config.storage.move) {
         const moved = await config.storage.move(source, permanent);
-        return moved.url;
+        return toStoredAssetPath(moved.url);
       }
       await config.storage.write(permanent, bytes);
       await config.storage.delete(source);
-      return permanent.url;
+      return toStoredAssetPath(permanent.url);
     }
 
     try {
@@ -52,7 +58,7 @@ export function createFileManager(config: FileManagerConfig): FileManager {
       if (config.metadataStore && result.metadata) {
         await config.metadataStore.upsert({
           fileKey: writtenPrimary.key,
-          fileUrl: writtenPrimary.url,
+          fileUrl: toStoredAssetPath(writtenPrimary.url),
           processor: matchingProcessor.name,
           data: result.metadata,
           derivatives,
@@ -60,17 +66,18 @@ export function createFileManager(config: FileManagerConfig): FileManager {
       }
 
       await config.storage.delete(source);
-      return writtenPrimary.url;
+      return toStoredAssetPath(writtenPrimary.url);
     } catch (err) {
       console.error(`[FileManager] Processor "${matchingProcessor.name}" failed, storing original file:`, err);
       await config.storage.write(permanent, bytes);
       await config.storage.delete(source);
-      return permanent.url;
+      return toStoredAssetPath(permanent.url);
     }
   }
 
   async function deleteFile(url: string): Promise<void> {
-    const file = config.locations.fromUrl(url);
+    const normalizedInput = toStoredAssetPath(url);
+    const file = config.locations.fromUrl(normalizedInput);
     if (!file) return;
 
     for (const processor of processors) {
@@ -106,6 +113,11 @@ export function createFileManager(config: FileManagerConfig): FileManager {
       return Promise.all(value.map((item, index) => processValue(item, previousArray[index], deleteReplacedFiles)));
     }
 
+    const normalizedUploadValue = normalizeFileUploadValue(value);
+    if (typeof normalizedUploadValue === 'string') {
+      return processStorageString(normalizedUploadValue, previousValue, deleteReplacedFiles);
+    }
+
     if (value && typeof value === 'object') {
       const previousObject = previousValue && typeof previousValue === 'object' ? previousValue as Record<string, unknown> : {};
       const output: Record<string, unknown> = {};
@@ -116,14 +128,7 @@ export function createFileManager(config: FileManagerConfig): FileManager {
     }
 
     if (typeof value === 'string') {
-      const file = config.locations.fromUrl(value);
-      if (file && config.locations.isTemp(file)) {
-        if (deleteReplacedFiles && typeof previousValue === 'string' && previousValue !== value) {
-          await deleteBestEffort(previousValue);
-        }
-        return promoteTempFile(value);
-      }
-      return value;
+      return processStorageString(value, previousValue, deleteReplacedFiles);
     }
 
     if ((value === null || value === '') && deleteReplacedFiles && typeof previousValue === 'string') {
@@ -133,19 +138,51 @@ export function createFileManager(config: FileManagerConfig): FileManager {
     return value;
   }
 
+  async function processStorageString(value: string, previousValue: unknown, deleteReplacedFiles: boolean): Promise<string> {
+    const storedValue = toStoredAssetPath(value);
+    const file = config.locations.fromUrl(storedValue);
+
+    if (file && config.locations.isTemp(file)) {
+      const promoted = await promoteTempFile(storedValue);
+      if (deleteReplacedFiles && typeof previousValue === 'string') {
+        const previousStored = toStoredAssetPath(previousValue);
+        if (previousStored !== promoted) {
+          await deleteBestEffort(previousStored);
+        }
+      }
+      return promoted;
+    }
+
+    if (deleteReplacedFiles && (storedValue === '' || storedValue === null) && typeof previousValue === 'string') {
+      await deleteBestEffort(previousValue);
+    }
+
+    return storedValue;
+  }
+
   function collectFileUrls(input: unknown): string[] {
     const urls = new Set<string>();
 
     function visit(value: unknown) {
       if (!value) return;
-      if (typeof value === 'string') {
-        if (config.locations.fromUrl(value)) urls.add(value);
+
+      const normalized = normalizeFileUploadValue(value);
+      if (typeof normalized === 'string') {
+        if (config.locations.fromUrl(normalized)) urls.add(normalized);
         return;
       }
+
+      if (typeof value === 'string') {
+        const storedValue = toStoredAssetPath(value);
+        if (config.locations.fromUrl(storedValue)) urls.add(storedValue);
+        return;
+      }
+
       if (Array.isArray(value)) {
         value.forEach(visit);
         return;
       }
+
       if (typeof value === 'object') {
         Object.values(value as Record<string, unknown>).forEach(visit);
       }
@@ -182,8 +219,14 @@ export function createFileManager(config: FileManagerConfig): FileManager {
       });
       const bytes = Buffer.from(await file.arrayBuffer());
       const written = await config.storage.write({ ...target, size: bytes.length }, bytes);
+      const path = toStoredAssetPath(written.url);
 
-      return json(written.url);
+      return json({
+        success: true,
+        path,
+        url: toPublicAssetUrl(path, config.upload?.publicBaseUrl),
+        data: path,
+      });
     };
   }
 
@@ -209,7 +252,8 @@ export function createFileManager(config: FileManagerConfig): FileManager {
   function createDownloadHandler(): RequestHandler {
     return async function POST({ request }) {
       const body = await request.json();
-      const file = typeof body?.url === 'string' ? config.locations.fromUrl(body.url) : null;
+      const normalizedUrl = typeof body?.url === 'string' ? toStoredAssetPath(body.url) : '';
+      const file = normalizedUrl ? config.locations.fromUrl(normalizedUrl) : null;
       if (!file) return new Response('File not found', { status: 404 });
 
       try {
