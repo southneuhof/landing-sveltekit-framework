@@ -48,6 +48,37 @@ function createLocals() {
 }
 
 describe('crud canonical response contract', () => {
+  it('does not auto-delete public assets during CRUD delete cleanup', async () => {
+    const deleteFile = vi.fn(async () => undefined)
+
+    const response = await createModelDeleteHandler({
+      prisma: {
+        article: {
+          fields: { id: true, media: true },
+          findFirst: vi.fn(async () => ({ id: 'a', media: '/storage/public/asset.jpg' })),
+          delete: vi.fn(async () => ({ id: 'a', media: '/storage/public/asset.jpg' })),
+        },
+      },
+      modelConfigs: {
+        './article.ts': baseModelConfig,
+      },
+      files: {
+        collectFileUrls: vi.fn(() => ['/storage/public/asset.jpg']),
+        deleteFile,
+      } as any,
+    })({
+      request: new Request('http://localhost/api/article/delete', {
+        method: 'DELETE',
+        body: JSON.stringify({ id: 'a' }),
+      }),
+      params: { model },
+      locals: createLocals(),
+    } as any)
+
+    expect(response.status).toBe(200)
+    expect(deleteFile).not.toHaveBeenCalled()
+  })
+
   it('converts storage asset strings to { path, data, url } objects when PUBLIC_APP_URL is set', async () => {
     const previous = process.env.PUBLIC_APP_URL;
     process.env.PUBLIC_APP_URL = 'https://landing.example.com';

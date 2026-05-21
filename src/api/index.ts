@@ -400,8 +400,10 @@ export function createModelDeleteHandler(config: HandlerConfig) {
       if (config.files) {
         const urls = config.files.collectFileUrls(previousData ?? data);
         await Promise.all(urls.map(async (url) => {
+          const storedUrl = toStoredAssetPath(url);
+          if (storedUrl.startsWith('/storage/public/')) return;
           try {
-            await config.files?.deleteFile(url);
+            await config.files?.deleteFile(storedUrl);
           } catch (cleanupError) {
             console.error('[CRUD] Failed to delete referenced file:', cleanupError);
           }

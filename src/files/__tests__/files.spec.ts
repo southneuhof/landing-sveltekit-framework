@@ -104,6 +104,33 @@ describe('file manager', () => {
     expect(deleteSpy).toHaveBeenCalledWith(expect.objectContaining({ key: 'private/old.txt' }));
   });
 
+  it('does not auto-delete replaced public assets', async () => {
+    const root = await createTempRoot();
+    const storage = createLocalFileStorageDriver({ root });
+    const manager = createFileManager({
+      storage,
+      locations: createStorageUrlLocationStrategy(),
+    });
+
+    await mkdir(join(root, 'temp/private'), { recursive: true });
+    await mkdir(join(root, 'public'), { recursive: true });
+    await writeFile(join(root, 'temp/private/new.txt'), 'new');
+    await writeFile(join(root, 'public/old.txt'), 'old');
+    const deleteSpy = vi.spyOn(storage, 'delete');
+
+    const result = await manager.processPayloadFiles(
+      { media: { path: '/storage/temp/private/new.txt' } },
+      {
+        previousData: { media: '/storage/public/old.txt' },
+        deleteReplacedFiles: true,
+      },
+    );
+
+    expect(result).toEqual({ media: '/storage/private/new.txt' });
+    await expect(readFile(join(root, 'public/old.txt'), 'utf8')).resolves.toBe('old');
+    expect(deleteSpy).not.toHaveBeenCalledWith(expect.objectContaining({ key: 'public/old.txt' }));
+  });
+
   it('promotes absolute old temp URL to relative permanent path', async () => {
     const root = await createTempRoot();
     const manager = createFileManager({

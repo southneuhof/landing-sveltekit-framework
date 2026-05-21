@@ -1,6 +1,7 @@
 import { json, type RequestHandler } from '@sveltejs/kit';
 import { lookup } from 'mime-types';
 import {
+  isStorageAsset,
   normalizeFileUploadValue,
   toPublicAssetUrl,
   toStoredAssetPath,
@@ -146,7 +147,7 @@ export function createFileManager(config: FileManagerConfig): FileManager {
       const promoted = await promoteTempFile(storedValue);
       if (deleteReplacedFiles && typeof previousValue === 'string') {
         const previousStored = toStoredAssetPath(previousValue);
-        if (previousStored !== promoted) {
+        if (previousStored !== promoted && !isPublicReusableAsset(previousStored)) {
           await deleteBestEffort(previousStored);
         }
       }
@@ -154,7 +155,10 @@ export function createFileManager(config: FileManagerConfig): FileManager {
     }
 
     if (deleteReplacedFiles && (storedValue === '' || storedValue === null) && typeof previousValue === 'string') {
-      await deleteBestEffort(previousValue);
+      const previousStored = toStoredAssetPath(previousValue);
+      if (!isPublicReusableAsset(previousStored)) {
+        await deleteBestEffort(previousStored);
+      }
     }
 
     return storedValue;
@@ -299,6 +303,10 @@ export function createFileManager(config: FileManagerConfig): FileManager {
 
     const pathname = event.url?.pathname;
     return pathname ? config.locations.fromUrl(pathname) : null;
+  }
+
+  function isPublicReusableAsset(value: string): boolean {
+    return isStorageAsset(value) && value.startsWith('/storage/public/');
   }
 
   return {
