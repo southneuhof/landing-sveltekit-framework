@@ -1,5 +1,13 @@
 # @southneuhof/landing-sveltekit-framework
 
+## 0.0.3
+
+### Patch Changes
+
+- Release local package updates.
+- Updated dependencies
+  - @southneuhof/utilities@0.1.1
+
 ## 0.0.2
 
 ### Patch Changes
