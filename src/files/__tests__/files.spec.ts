@@ -146,6 +146,17 @@ describe('file manager', () => {
     expect(promoted).toBe('/storage/public/tmp.txt');
   });
 
+  it('can place derivatives outside the source folder', async () => {
+    const locations = createStorageUrlLocationStrategy({ derivativeBaseKey: '_optimized' });
+    const source = locations.fromUrl('/storage/public/gallery/photo.png');
+    expect(source).not.toBeNull();
+
+    const derivative = locations.derivativeFor?.(source!, 'photo__w512.webp');
+    expect(derivative?.key).toBe('_optimized/public/gallery/photo.png/photo__w512.webp');
+    expect(derivative?.url).toBe('/storage/_optimized/public/gallery/photo.png/photo__w512.webp');
+    expect(derivative?.visibility).toBe('public');
+  });
+
   it('delete and collect accept absolute and relative storage URLs', async () => {
     const root = await createTempRoot();
     const storage = createLocalFileStorageDriver({ root });
@@ -240,6 +251,56 @@ describe('file manager', () => {
     expect(record?.data.width).toBe(80);
     expect((record?.data.variants as any[]).length).toBeGreaterThan(0);
     await expect(readFile(join(root, 'public/direct__w32.webp'))).resolves.toBeInstanceOf(Buffer);
+  });
+
+  it('processes directly written public images with hidden derivatives', async () => {
+    const root = await createTempRoot();
+    const metadataStore = createMemoryMetadataStore();
+    const manager = createFileManager({
+      storage: createLocalFileStorageDriver({ root }),
+      locations: createStorageUrlLocationStrategy({ derivativeBaseKey: '_optimized' }),
+      metadataStore,
+      processors: [imageProcessor()],
+    });
+
+    const imageBytes = await sharp({
+      create: {
+        width: 80,
+        height: 40,
+        channels: 3,
+        background: '#00ff00',
+      },
+    }).jpeg().toBuffer();
+
+    const written = await manager.writeProcessedFile({
+      key: 'public/direct.jpg',
+      url: '/storage/public/direct.jpg',
+      filename: 'direct.jpg',
+      contentType: 'image/jpeg',
+      visibility: 'public',
+    }, imageBytes);
+
+    expect(written.url).toBe('/storage/public/direct.jpg');
+    await expect(readFile(join(root, 'public/direct.jpg'))).resolves.toBeInstanceOf(Buffer);
+    await expect(readFile(join(root, 'public/direct__w32.webp'))).rejects.toThrow();
+    await expect(readFile(join(root, '_optimized/public/direct.jpg/direct__w32.webp'))).resolves.toBeInstanceOf(Buffer);
+
+    const record = await metadataStore.get('public/direct.jpg', 'image');
+    expect(record?.derivatives?.[0]?.key).toContain('_optimized/public/direct.jpg/direct__w');
+
+    const manifestHandler = createImageManifestHandler({
+      metadataStore,
+      keyFromRequest: () => 'public/direct.jpg',
+    });
+    const response = await manifestHandler({ params: {}, url: new URL('http://localhost') } as any);
+    expect(response.status).toBe(200);
+    const manifest = await response.json();
+    expect(manifest.variants[0].url).toContain('/storage/_optimized/public/direct.jpg/direct__w');
+
+    await manager.deleteFile('/storage/public/direct.jpg');
+    await expect(readFile(join(root, 'public/direct.jpg'))).rejects.toThrow();
+    await expect(readFile(join(root, '_optimized/public/direct.jpg/direct__w32.webp'))).rejects.toThrow();
+    await expect(metadataStore.get('public/direct.jpg', 'image')).resolves.toBeNull();
   });
 
   it('writes directly uploaded non-images unchanged without metadata', async () => {

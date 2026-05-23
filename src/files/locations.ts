@@ -6,6 +6,7 @@ export type StorageUrlLocationStrategyConfig = {
   publicBaseUrl?: string;
   basePath?: string;
   defaultVisibility?: string;
+  derivativeBaseKey?: string;
 };
 
 export function createStorageUrlLocationStrategy(config: StorageUrlLocationStrategyConfig = {}): FileLocationStrategy {
@@ -75,7 +76,9 @@ export function createStorageUrlLocationStrategy(config: StorageUrlLocationStrat
       };
     },
     derivativeFor(source, filename) {
-      const key = join(dirname(source.key), filename);
+      const key = config.derivativeBaseKey
+        ? join(config.derivativeBaseKey, source.key, filename)
+        : join(dirname(source.key), filename);
       const url = toStorageUrl(key, basePath);
       const baseForPublicUrl = typeof source.metadata?.publicBaseUrl === 'string'
         ? source.metadata.publicBaseUrl
