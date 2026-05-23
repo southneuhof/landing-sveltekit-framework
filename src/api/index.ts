@@ -607,7 +607,8 @@ function mergeCreateConfigs(base: ModelConfig, operation?: ModelConfig['create']
 }
 
 function mergeUpdateConfigs(base: ModelConfig, create?: ModelConfig['create'], update?: ModelConfig['update']): ModelConfig['update'] {
-  return { ...base, ...create, ...update };
+  const { lifecycle: _omitLifecycle, ...createRest } = create ?? {};
+  return { ...base, ...createRest, ...update };
 }
 
 function mergeDeleteConfigs(base: ModelConfig, operation?: ModelConfig['delete']): ModelConfig['delete'] {
