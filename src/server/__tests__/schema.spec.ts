@@ -4,6 +4,7 @@ import {
   buildSectionIncludeFromSchema,
   createNestedSectionFromSchemaData,
   createSectionFromSchema,
+  hydrateSectionsFromSchemas,
 } from '../schema.js';
 
 describe('readSectionSchemas', () => {
@@ -512,6 +513,40 @@ describe('buildSectionIncludeFromSchema', () => {
   });
 });
 
+describe('hydrateSectionsFromSchemas', () => {
+  it('hydrates resource slots as placeholders ([] for many, null otherwise)', async () => {
+    const prisma = {
+      section: {
+        findUnique: vi.fn(async () => ({
+          id: 's1',
+          section_type_code: 'article-highlights',
+          contents: [{ id: 'c1', order: 1, title: 'Header' }],
+        })),
+      },
+    };
+    const result = await hydrateSectionsFromSchemas(
+      [{ id: 's1', section_type_code: 'article-highlights' } as any],
+      prisma,
+      {
+        'article-highlights': {
+          code: 'article-highlights',
+          data: {
+            content: { type: 'content', order: 1 },
+            articles: { type: 'resource', source: 'article', order: 2, many: true },
+            featuredArticle: { type: 'resource', source: 'article', order: 3 },
+          },
+        },
+      },
+    );
+
+    expect(result[0].data).toEqual({
+      content: { id: 'c1', order: 1, title: 'Header' },
+      articles: [],
+      featuredArticle: null,
+    });
+  });
+});
+
 describe('createSectionFromSchema', () => {
   it('creates a parent section with next order when max order exists', async () => {
     const prisma = {
@@ -726,7 +761,7 @@ describe('createSectionFromSchema', () => {
     ).rejects.toThrow(/Unknown section schema code "unknown"/);
   });
 
-  it('materializes slots by type in ascending order and does not duplicate placeholders for many=true', async () => {
+  it('materializes slots by type in ascending order, skips resource slots, and does not duplicate placeholders for many=true', async () => {
     const calls: string[] = [];
     const prisma = {
       section: {
@@ -767,6 +802,7 @@ describe('createSectionFromSchema', () => {
           data: {
             c: { type: 'content', order: 2, many: true },
             g: { type: 'gallery', order: 1, many: true },
+            r: { type: 'resource', source: 'article', order: 2.5, many: true },
             s: { type: 'section', order: 4 },
             sg: { type: 'sectionGroup', order: 3 },
           },
@@ -780,6 +816,7 @@ describe('createSectionFromSchema', () => {
     expect(prisma.content.create).toHaveBeenCalledTimes(1);
     expect(prisma.gallery.create).toHaveBeenCalledTimes(1);
     expect(prisma.sectionGroup.create).toHaveBeenCalledTimes(1);
+    expect(calls).not.toContain('resource:2.5');
 
     expect(prisma.content.create).toHaveBeenCalledWith(
       expect.objectContaining({

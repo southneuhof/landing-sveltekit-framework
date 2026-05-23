@@ -1,12 +1,16 @@
 import { error } from '@sveltejs/kit';
 import type { LandingFrameworkConfig } from '../types/index.js';
 import { hydrateSectionsFromSchemas } from './schema.js';
+import { loadSectionData } from './section-data.js';
+import { loadSectionResources } from './section-resources.js';
 export {
   readSectionSchemas,
   createSectionSchemaManager,
   createSectionFromSchema,
   createNestedSectionFromSchemaData,
 } from './schema.js';
+export { loadSectionData } from './section-data.js';
+export { loadSectionResources } from './section-resources.js';
 export type {
   CreateSectionFromSchemaInput,
   CreateSectionFromSchemaResult,
@@ -18,6 +22,8 @@ export type { ReorderEntriesOptions } from '../utils/reorder.js';
 
 export type LandingPageLoadConfig = Pick<LandingFrameworkConfig, 'prisma' | 'getLocale'> & {
   sectionSchemas?: LandingFrameworkConfig['sectionSchemas'];
+  sectionLoaders?: LandingFrameworkConfig['sectionLoaders'];
+  sectionResourceResolvers?: LandingFrameworkConfig['sectionResourceResolvers'];
 };
 
 export function createLandingPageLoad(config: LandingPageLoadConfig) {
@@ -74,7 +80,24 @@ export function createLandingPageLoad(config: LandingPageLoadConfig) {
       config.sectionSchemas ?? {},
     );
 
-    return { sections };
+    const resourceLoadedSections = await loadSectionResources(
+      sections,
+      config.sectionSchemas ?? {},
+      config.sectionResourceResolvers ?? {},
+      {
+        prisma: config.prisma,
+        getLocale: config.getLocale,
+        url,
+      },
+    );
+
+    const loadedSections = await loadSectionData(resourceLoadedSections, config.sectionLoaders ?? {}, {
+      prisma: config.prisma,
+      getLocale: config.getLocale,
+      url,
+    });
+
+    return { sections: loadedSections };
   };
 }
 

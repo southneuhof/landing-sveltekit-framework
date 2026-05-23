@@ -121,6 +121,10 @@ export function buildSectionIncludeFromSchema(schema: SectionSchema, sectionSche
 }
 
 function normalizeSlotData(slot: SectionSchemaSlot, sectionRecord: AnyRecord) {
+  if (slot.type === 'resource') {
+    return slot.many ? [] : null;
+  }
+
   if (slot.type === 'content') {
     const list = (sectionRecord.contents ?? []) as AnyRecord[];
     if (slot.many) return list;
@@ -201,6 +205,10 @@ async function materializeSectionSchemaData({
   const slots = Object.values(schemaData).sort((a, b) => a.order - b.order);
 
   for (const slot of slots) {
+    if (slot.type === 'resource') {
+      continue;
+    }
+
     if (slot.type === 'content') {
       await prisma.content.create({
         data: {

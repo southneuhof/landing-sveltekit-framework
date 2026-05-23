@@ -10,7 +10,7 @@ export type LandingSection = AnyRecord & {
   data?: unknown;
 };
 
-export type SectionSchemaSlotType = 'content' | 'gallery' | 'section' | 'sectionGroup';
+export type SectionSchemaSlotType = 'content' | 'gallery' | 'section' | 'sectionGroup' | 'resource';
 
 export type SectionEditorComponentToken = string;
 export type SectionSchemaEditorInputConfig = Record<string, any>;
@@ -74,6 +74,13 @@ export type SectionSchemaSlot = {
   fieldSets?: Record<string, { fields: readonly string[] }>;
   schema?: NestedSectionSchema;
   editor?: SectionSchemaSlotEditor;
+  source?: string;
+  params?: Record<string, unknown>;
+};
+
+export type ResourceSlot = SectionSchemaSlot & {
+  type: 'resource';
+  source: string;
 };
 
 export type SectionSchema = {
@@ -130,6 +137,11 @@ type NestedLandingSectionForSchema<TSchema extends NestedSectionSchema> = Omit<L
 };
 
 type SectionDataBySlot<TSlot extends SectionSchemaSlot> =
+  TSlot['type'] extends 'resource'
+    ? TSlot['many'] extends true
+      ? AnyRecord[]
+      : AnyRecord | null
+    :
   TSlot['type'] extends 'content' | 'gallery'
     ? TSlot['many'] extends true
       ? SlotDataValue<TSlot>[]
@@ -151,15 +163,36 @@ export type LandingSectionForSchema<TSchema extends SectionSchema> = Omit<Landin
   };
 };
 
-export type SectionDataLoader<TSection extends LandingSection = LandingSection> = (
+export type SectionLoaderContext = {
+  prisma: any;
+  getLocale: () => string;
+  url: URL;
+};
+
+export type SectionDataLoader<
+  TSection extends LandingSection = LandingSection,
+  TContext extends AnyRecord = SectionLoaderContext,
+> = (
   section: TSection,
-  context?: AnyRecord,
+  context: TContext,
 ) => Promise<unknown>;
 
-export type SectionLoaderRegistry<TSection extends LandingSection = LandingSection> = Record<
+export type SectionLoaderRegistry<
+  TSection extends LandingSection = LandingSection,
+  TContext extends AnyRecord = SectionLoaderContext,
+> = Record<
   string,
-  SectionDataLoader<TSection>
+  SectionDataLoader<TSection, TContext>
 >;
+
+export type SectionResourceResolver = (input: {
+  section: LandingSection;
+  slotKey: string;
+  slot: ResourceSlot;
+  context: SectionLoaderContext;
+}) => Promise<unknown>;
+
+export type SectionResourceResolverRegistry = Record<string, SectionResourceResolver>;
 
 export type SectionComponentModule = {
   default: Component<any>;
@@ -304,6 +337,8 @@ export type LandingFrameworkConfig = {
   getLocale: () => string;
   modelConfigs?: ModelConfigRegistry;
   sectionSchemas?: SectionSchemaRegistry;
+  sectionLoaders?: SectionLoaderRegistry;
+  sectionResourceResolvers?: SectionResourceResolverRegistry;
   auth?: {
     hydrateRequestAuth?: (event: any) => Promise<void>;
     requireAuthenticatedUser?: (locals: any) => unknown;
