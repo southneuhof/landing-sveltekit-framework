@@ -57,6 +57,17 @@ export type SectionSchemaMeta = {
   editor?: SectionSchemaMetaEditor;
 };
 
+export type SectionWrapperOverflow = 'hidden' | 'visible' | 'clip-x';
+
+export type SectionWrapperRenderConfig = {
+  overflow?: SectionWrapperOverflow;
+};
+
+export type SectionRenderConfig = {
+  wrapper?: SectionWrapperRenderConfig;
+  resolveWrapper?: (input: { section: LandingSection }) => SectionWrapperRenderConfig;
+};
+
 export type NestedSectionSchema = {
   info?: {
     name?: string;
@@ -92,6 +103,7 @@ export type SectionSchema = {
   editor?: {
     group?: string;
   };
+  render?: SectionRenderConfig;
   meta?: SectionSchemaMeta;
   data: Record<string, SectionSchemaSlot>;
 };

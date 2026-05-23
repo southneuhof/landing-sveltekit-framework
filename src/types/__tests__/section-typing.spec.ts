@@ -6,6 +6,14 @@ const contentDefaultSchema = defineSectionSchema({
   meta: {
     fields: ['width_preset'] as const,
   },
+  render: {
+    wrapper: {
+      overflow: 'hidden',
+    },
+    resolveWrapper: ({ section }) => ({
+      overflow: section.meta?.width_preset === 'full' ? 'visible' : 'clip-x',
+    }),
+  },
   data: {
     content: {
       type: 'content',
@@ -104,5 +112,21 @@ describe('LandingSectionForSchema typing', () => {
     }
 
     expect(item.data.gallery?.attachment).toBe('logo.png')
+  })
+
+  it('accepts schema-driven wrapper render config', () => {
+    expect(contentDefaultSchema.render?.wrapper?.overflow).toBe('hidden')
+    expect(contentDefaultSchema.render?.resolveWrapper?.({
+      section: {
+        id: 'section-1',
+        meta: { width_preset: 'full' },
+      },
+    }).overflow).toBe('visible')
+    expect(contentDefaultSchema.render?.resolveWrapper?.({
+      section: {
+        id: 'section-2',
+        meta: { width_preset: 'md' },
+      },
+    }).overflow).toBe('clip-x')
   })
 })
