@@ -103,6 +103,7 @@ export type FileManager = {
   createServeHandler(): RequestHandler;
   createDownloadHandler(): RequestHandler;
   promoteTempFile(url: string): Promise<string>;
+  writeProcessedFile(file: FileObject, bytes: Buffer): Promise<FileObject>;
   deleteFile(url: string): Promise<void>;
   processPayloadFiles<T>(input: T, options?: {
     previousData?: unknown;

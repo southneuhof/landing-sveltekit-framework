@@ -46,8 +46,30 @@ export function createFileManager(config: FileManagerConfig): FileManager {
     }
 
     try {
-      const result = await matchingProcessor.process({ file: permanent, bytes, manager: managerContext });
-      const primary = result.primary ?? { file: permanent, bytes };
+      const writtenPrimary = await writeProcessedFile(permanent, bytes, matchingProcessor);
+      await config.storage.delete(source);
+      return toStoredAssetPath(writtenPrimary.url);
+    } catch (err) {
+      await config.storage.delete(source);
+      return toStoredAssetPath(permanent.url);
+    }
+  }
+
+  async function writeProcessedFile(file: FileObject, bytes: Buffer, processorOverride?: Awaited<ReturnType<typeof findProcessor>>): Promise<FileObject> {
+    const fileWithContentType = {
+      ...file,
+      contentType: file.contentType || lookup(file.filename) || undefined,
+      size: bytes.length,
+    };
+    const matchingProcessor = processorOverride ?? await findProcessor(fileWithContentType, bytes);
+
+    if (!matchingProcessor) {
+      return config.storage.write(fileWithContentType, bytes);
+    }
+
+    try {
+      const result = await matchingProcessor.process({ file: fileWithContentType, bytes, manager: managerContext });
+      const primary = result.primary ?? { file: fileWithContentType, bytes };
       const writtenPrimary = await config.storage.write(primary.file, primary.bytes);
       const derivatives: FileObject[] = [];
 
@@ -66,13 +88,10 @@ export function createFileManager(config: FileManagerConfig): FileManager {
         });
       }
 
-      await config.storage.delete(source);
-      return toStoredAssetPath(writtenPrimary.url);
+      return writtenPrimary;
     } catch (err) {
       console.error(`[FileManager] Processor "${matchingProcessor.name}" failed, storing original file:`, err);
-      await config.storage.write(permanent, bytes);
-      await config.storage.delete(source);
-      return toStoredAssetPath(permanent.url);
+      return config.storage.write(fileWithContentType, bytes);
     }
   }
 
@@ -314,6 +333,7 @@ export function createFileManager(config: FileManagerConfig): FileManager {
     createServeHandler,
     createDownloadHandler,
     promoteTempFile,
+    writeProcessedFile,
     deleteFile,
     processPayloadFiles,
     collectFileUrls,

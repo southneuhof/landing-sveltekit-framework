@@ -10,6 +10,7 @@ import {
   createStorageUrlLocationStrategy,
   imageProcessor,
   resolveLocalStoragePath,
+  type FileProcessor,
   type FileMetadataRecord,
   type FileMetadataStore,
 } from '../index.js';
@@ -204,5 +205,94 @@ describe('file manager', () => {
     const manifest = await response.json();
     expect(manifest.placeholder).toMatch(/^data:image\/webp;base64,/);
     expect(manifest.variants[0].url).toContain('/storage/private/photo__w');
+  });
+
+  it('processes directly written public images and stores metadata', async () => {
+    const root = await createTempRoot();
+    const metadataStore = createMemoryMetadataStore();
+    const manager = createFileManager({
+      storage: createLocalFileStorageDriver({ root }),
+      locations: createStorageUrlLocationStrategy(),
+      metadataStore,
+      processors: [imageProcessor()],
+    });
+
+    const imageBytes = await sharp({
+      create: {
+        width: 80,
+        height: 40,
+        channels: 3,
+        background: '#00ff00',
+      },
+    }).jpeg().toBuffer();
+
+    const written = await manager.writeProcessedFile({
+      key: 'public/direct.jpg',
+      url: '/storage/public/direct.jpg',
+      filename: 'direct.jpg',
+      contentType: 'image/jpeg',
+      visibility: 'public',
+    }, imageBytes);
+
+    expect(written.url).toBe('/storage/public/direct.jpg');
+    await expect(readFile(join(root, 'public/direct.jpg'))).resolves.toBeInstanceOf(Buffer);
+    const record = await metadataStore.get('public/direct.jpg', 'image');
+    expect(record?.data.width).toBe(80);
+    expect((record?.data.variants as any[]).length).toBeGreaterThan(0);
+    await expect(readFile(join(root, 'public/direct__w32.webp'))).resolves.toBeInstanceOf(Buffer);
+  });
+
+  it('writes directly uploaded non-images unchanged without metadata', async () => {
+    const root = await createTempRoot();
+    const metadataStore = createMemoryMetadataStore();
+    const manager = createFileManager({
+      storage: createLocalFileStorageDriver({ root }),
+      locations: createStorageUrlLocationStrategy(),
+      metadataStore,
+      processors: [imageProcessor()],
+    });
+
+    const written = await manager.writeProcessedFile({
+      key: 'public/document.txt',
+      url: '/storage/public/document.txt',
+      filename: 'document.txt',
+      contentType: 'text/plain',
+      visibility: 'public',
+    }, Buffer.from('hello'));
+
+    expect(written.size).toBe(5);
+    await expect(readFile(join(root, 'public/document.txt'), 'utf8')).resolves.toBe('hello');
+    await expect(metadataStore.get('public/document.txt', 'image')).resolves.toBeNull();
+  });
+
+  it('stores original file when a direct upload processor fails', async () => {
+    const root = await createTempRoot();
+    const metadataStore = createMemoryMetadataStore();
+    const failingProcessor: FileProcessor = {
+      name: 'failing',
+      supports: () => true,
+      async process() {
+        throw new Error('boom');
+      },
+    };
+    const manager = createFileManager({
+      storage: createLocalFileStorageDriver({ root }),
+      locations: createStorageUrlLocationStrategy(),
+      metadataStore,
+      processors: [failingProcessor],
+    });
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    const written = await manager.writeProcessedFile({
+      key: 'public/fallback.bin',
+      url: '/storage/public/fallback.bin',
+      filename: 'fallback.bin',
+      contentType: 'application/octet-stream',
+      visibility: 'public',
+    }, Buffer.from('original'));
+
+    expect(written.size).toBe(8);
+    await expect(readFile(join(root, 'public/fallback.bin'), 'utf8')).resolves.toBe('original');
+    await expect(metadataStore.get('public/fallback.bin', 'failing')).resolves.toBeNull();
   });
 });
