@@ -337,6 +337,118 @@ describe('createNestedSectionFromSchemaData', () => {
     expect(prisma.gallery.create).not.toHaveBeenCalled();
   });
 
+  it('creates a section inside a second-level gallery-tree sectionGroup', async () => {
+    const prisma = {
+      sectionGroup: {
+        findUnique: vi.fn(async ({ where }) => {
+          if (where.id === 'leaf-group') {
+            return {
+              id: 'leaf-group',
+              order: 1,
+              parentSection: {
+                id: 'gallery-group-section',
+                name: 'Gallery Group',
+                section_type_code: null,
+                section_group_id: 'root-nested-group',
+              },
+            };
+          }
+
+          if (where.id === 'root-nested-group') {
+            return {
+              id: 'root-nested-group',
+              order: 2,
+              parentSection: {
+                id: 'gallery-tree-root',
+                name: 'Gallery Tree',
+                section_type_code: 'gallery-tree',
+                section_group_id: 'page-group',
+              },
+            };
+          }
+
+          return null;
+        }),
+        create: vi.fn(async () => ({})),
+      },
+      section: {
+        findFirst: vi.fn(async () => null),
+        findUnique: vi.fn(async () => null),
+        create: vi.fn(async ({ data }) => ({ id: 'leaf-item-section', ...data })),
+      },
+      content: {
+        create: vi.fn(async () => ({})),
+      },
+      gallery: {
+        create: vi.fn(async () => ({})),
+      },
+    };
+
+    const result = await createNestedSectionFromSchemaData({
+      prisma,
+      sectionSchemas: {
+        'gallery-tree': {
+          code: 'gallery-tree',
+          data: {
+            content: { type: 'content', order: 1 },
+            sectionGroup: {
+              type: 'sectionGroup',
+              order: 2,
+              many: true,
+              schema: {
+                info: {
+                  name: 'Gallery Group',
+                },
+                data: {
+                  sectionGroup: {
+                    type: 'sectionGroup',
+                    order: 1,
+                    many: true,
+                    schema: {
+                      info: {
+                        name: 'Gallery Item',
+                        description: 'Leaf gallery item with content and images',
+                      },
+                      meta: {
+                        defaultValues: {},
+                      },
+                      data: {
+                        content: { type: 'content', order: 1 },
+                        gallery: { type: 'gallery', order: 2, many: true },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      sectionGroupId: 'leaf-group',
+    });
+
+    expect(result.section.name).toBe('Gallery Item');
+    expect(result.section.description).toBe('Leaf gallery item with content and images');
+    expect(result.section.section_group_id).toBe('leaf-group');
+    expect(result.section.section_type_code).toBeNull();
+    expect(prisma.content.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          section_id: 'leaf-item-section',
+          order: 1,
+        }),
+      }),
+    );
+    expect(prisma.gallery.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          section_id: 'leaf-item-section',
+          order: 2,
+        }),
+      }),
+    );
+  });
+
   it('throws clear errors for missing inputs and invalid nested context', async () => {
     const prismaWithGroup = {
       sectionGroup: {

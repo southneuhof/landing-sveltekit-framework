@@ -304,6 +304,78 @@ export async function createSectionFromSchema(
   return { section };
 }
 
+async function resolveSectionSchema({
+  prisma,
+  sectionSchemas,
+  section,
+}: {
+  prisma: any;
+  sectionSchemas: SectionSchemaRegistry;
+  section: AnyRecord;
+}): Promise<SectionSchema | undefined> {
+  const sectionTypeCode = section.section_type_code ?? '';
+  if (sectionTypeCode) {
+    return sectionSchemas[sectionTypeCode];
+  }
+
+  if (section.section_group_id) {
+    const sectionGroup = await prisma.sectionGroup.findUnique({
+      where: { id: section.section_group_id },
+      include: {
+        parentSection: true,
+      },
+    });
+
+    if (sectionGroup?.parentSection) {
+      const parentSchema = await resolveSectionSchema({
+        prisma,
+        sectionSchemas,
+        section: sectionGroup.parentSection,
+      });
+      const groupSlot = parentSchema
+        ? Object.values(parentSchema.data).find(
+            (slot) => slot.type === 'sectionGroup' && slot.order === sectionGroup.order,
+          )
+        : undefined;
+
+      return groupSlot?.schema
+        ? {
+            code: `${parentSchema?.code ?? 'nested'}:${sectionGroup.order}`,
+            ...groupSlot.schema,
+          }
+        : undefined;
+    }
+  }
+
+  if (section.parent_section_id) {
+    const parentSection = await prisma.section.findUnique({
+      where: { id: section.parent_section_id },
+    });
+
+    if (parentSection) {
+      const parentSchema = await resolveSectionSchema({
+        prisma,
+        sectionSchemas,
+        section: parentSection,
+      });
+      const sectionSlot = parentSchema
+        ? Object.values(parentSchema.data).find(
+            (slot) => slot.type === 'section' && slot.order === section.order,
+          )
+        : undefined;
+
+      return sectionSlot?.schema
+        ? {
+            code: `${parentSchema?.code ?? 'nested'}:${section.order}`,
+            ...sectionSlot.schema,
+          }
+        : undefined;
+    }
+  }
+
+  return undefined;
+}
+
 export async function createNestedSectionFromSchemaData(
   input: CreateNestedSectionFromSchemaDataInput,
 ): Promise<CreateNestedSectionFromSchemaDataResult> {
@@ -328,8 +400,11 @@ export async function createNestedSectionFromSchemaData(
     throw new Error('section_type_code is required for non-nested section groups');
   }
 
-  const parentCode = sectionGroup.parentSection.section_type_code ?? '';
-  const parentSchema = sectionSchemas[parentCode];
+  const parentSchema = await resolveSectionSchema({
+    prisma,
+    sectionSchemas,
+    section: sectionGroup.parentSection,
+  });
 
   if (!parentSchema) {
     throw new Error('Parent section schema not found for nested section group');
