@@ -29,6 +29,8 @@ export type SectionSchemaSlotEditorContext = {
 
 export type SectionSchemaSlotEditor = {
   label?: string;
+  // Legacy key kept for backward compatibility with older section schemas.
+  fieldsAlias?: Record<string, string>;
   fieldAliases?: Record<string, string>;
   inputConfig?: SectionSchemaEditorInputConfig;
   fieldsDictionary?: Record<string, unknown>;
