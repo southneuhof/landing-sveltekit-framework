@@ -48,6 +48,7 @@ export type SectionSchemaSlotEditorResolvedConfig = Omit<SectionSchemaSlotEditor
 export type SectionSchemaMetaEditor = {
   inputConfig?: SectionSchemaEditorInputConfig;
   fieldsAlias?: Record<string, string>;
+  fieldsType?: Record<string, unknown>;
   getInitialData?: () => Promise<Record<string, unknown>>;
 };
 
