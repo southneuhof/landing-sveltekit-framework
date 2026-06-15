@@ -43,10 +43,7 @@ const dataListSchema = defineSectionSchema({
           gallery: {
             type: 'gallery',
             order: 1,
-            fields: ['title'] as const,
-            fieldSets: {
-              list: { fields: ['title', 'attachment'] as const },
-            },
+            fields: ['title', 'attachment'] as const,
           },
         },
       },
@@ -96,7 +93,7 @@ describe('LandingSectionForSchema typing', () => {
     expect(invalidFieldData).toBeDefined()
   })
 
-  it('includes field-set fields in slot field keys', () => {
+  it('includes nested slot fields in slot field keys', () => {
     type DataListSection = LandingSectionForSchema<typeof dataListSchema>
     type NestedItem = NonNullable<DataListSection['data']['childSections']>[number]
 

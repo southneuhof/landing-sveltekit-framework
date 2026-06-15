@@ -29,6 +29,7 @@ export type SectionSchemaSlotEditorContext = {
 
 export type SectionSchemaSlotEditor = {
   label?: string;
+  fields?: string[];
   // Legacy key kept for backward compatibility with older section schemas.
   fieldsAlias?: Record<string, string>;
   fieldAliases?: Record<string, string>;
@@ -44,7 +45,6 @@ export type SectionSchemaSlotEditor = {
 };
 
 export type SectionSchemaSlotEditorResolvedConfig = Omit<SectionSchemaSlotEditor, 'resolveConfig'> & {
-  fieldSet?: string;
 };
 
 export type SectionSchemaMetaEditor = {
@@ -85,7 +85,6 @@ export type SectionSchemaSlot = {
   order: number;
   many?: boolean;
   fields?: readonly string[];
-  fieldSets?: Record<string, { fields: readonly string[] }>;
   schema?: NestedSectionSchema;
   editor?: SectionSchemaSlotEditor;
   source?: string;
@@ -126,19 +125,12 @@ export type SectionMetaField<TSchema extends SectionSchema> =
 
 export type SectionMetaValues<TSchema extends SectionSchema> = Partial<Record<SectionMetaField<TSchema>, any>>;
 
-type FieldSetField<TSlot extends SectionSchemaSlot> =
-  TSlot['fieldSets'] extends Record<string, { fields: readonly (infer TField)[] }>
+type SlotField<TSlot extends SectionSchemaSlot> =
+  TSlot['fields'] extends readonly (infer TField)[]
     ? TField extends string
       ? TField
       : never
     : never;
-
-type SlotField<TSlot extends SectionSchemaSlot> =
-  TSlot['fields'] extends readonly (infer TField)[]
-    ? TField extends string
-      ? TField | FieldSetField<TSlot>
-      : FieldSetField<TSlot>
-    : FieldSetField<TSlot>;
 
 type SlotDataValue<TSlot extends SectionSchemaSlot> = AnyRecord & Partial<Record<SlotField<TSlot>, any>>;
 
