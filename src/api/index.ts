@@ -59,7 +59,7 @@ export function createModelListHandler(config: HandlerConfig) {
     try {
       const modelConfig = await resolveModelConfig(config.modelConfigs, event.params.model);
       assertModel(config.prisma, event.params.model);
-      const mergedConfig = mergeListConfigs(modelConfig, modelConfig.list);
+      const mergedConfig = mergeListConfigs(modelConfig, modelConfig.list) as NonNullable<ModelConfig['list']>;
       if (!mergedConfig.allow) throw new Error('Operation forbidden');
 
       let urlSearchParams = parseSearchParams(event.url.searchParams);
@@ -133,7 +133,7 @@ export function createModelDetailHandler(config: HandlerConfig) {
     try {
       const modelConfig = await resolveModelConfig(config.modelConfigs, event.params.model);
       assertModel(config.prisma, event.params.model);
-      const mergedConfig = mergeDetailConfigs(modelConfig, modelConfig.detail);
+      const mergedConfig = mergeDetailConfigs(modelConfig, modelConfig.detail) as NonNullable<ModelConfig['detail']>;
       if (!mergedConfig.allow) throw new Error('Operation forbidden');
 
       const identityKeys = mergedConfig.by ?? [];
@@ -282,7 +282,7 @@ export function createModelCreateHandler(config: HandlerConfig) {
     try {
       const modelConfig = await resolveModelConfig(config.modelConfigs, event.params.model);
       assertModel(config.prisma, event.params.model);
-      const mergedConfig = mergeCreateConfigs(modelConfig, modelConfig.create);
+      const mergedConfig = mergeCreateConfigs(modelConfig, modelConfig.create) as NonNullable<ModelConfig['create']>;
       if (!mergedConfig.allow) throw new Error('Operation forbidden');
 
       let body = await event.request.json();
@@ -321,7 +321,7 @@ export function createModelUpdateHandler(config: HandlerConfig) {
     try {
       const modelConfig = await resolveModelConfig(config.modelConfigs, event.params.model);
       assertModel(config.prisma, event.params.model);
-      const mergedConfig = mergeUpdateConfigs(modelConfig, modelConfig.create, modelConfig.update);
+      const mergedConfig = mergeUpdateConfigs(modelConfig, modelConfig.create, modelConfig.update) as NonNullable<ModelConfig['update']>;
       if (!mergedConfig.allow) throw new Error('Operation forbidden');
 
       let body = await event.request.json();
@@ -372,7 +372,7 @@ export function createModelDeleteHandler(config: HandlerConfig) {
     try {
       const modelConfig = await resolveModelConfig(config.modelConfigs, event.params.model);
       assertModel(config.prisma, event.params.model);
-      const mergedConfig = mergeDeleteConfigs(modelConfig, modelConfig.delete);
+      const mergedConfig = mergeDeleteConfigs(modelConfig, modelConfig.delete) as NonNullable<ModelConfig['delete']>;
       if (!mergedConfig.allow) throw new Error('Operation forbidden');
 
       let body = await event.request.json();
@@ -422,7 +422,7 @@ export function createModelReorderHandler(config: HandlerConfig) {
     try {
       const modelConfig = await resolveModelConfig(config.modelConfigs, event.params.model);
       assertModel(config.prisma, event.params.model);
-      const mergedConfig = mergeReorderConfigs(modelConfig, modelConfig.reorder);
+      const mergedConfig = mergeReorderConfigs(modelConfig, modelConfig.reorder) as NonNullable<ModelConfig['reorder']>;
       if (!mergedConfig.allow) throw new Error('Operation forbidden');
 
       let body = await event.request.json();
@@ -458,7 +458,7 @@ export function createModelVerifyHandler(config: HandlerConfig) {
     try {
       const modelConfig = await resolveModelConfig(config.modelConfigs, event.params.model);
       assertModel(config.prisma, event.params.model);
-      const mergedConfig = mergeVerifyConfigs(modelConfig, modelConfig.verify);
+      const mergedConfig = mergeVerifyConfigs(modelConfig, modelConfig.verify) as NonNullable<ModelConfig['verify']>;
       if (!mergedConfig.allow) throw new Error('Operation forbidden');
 
       let body = await event.request.json();
@@ -616,7 +616,12 @@ function mergeDeleteConfigs(base: ModelConfig, operation?: ModelConfig['delete']
 }
 
 function mergeReorderConfigs(base: ModelConfig, operation?: ModelConfig['reorder']): ModelConfig['reorder'] {
-  return { ...base, ...operation, by: operation?.by ?? base.by ?? ['id'] };
+  return {
+    ...base,
+    ...operation,
+    by: operation?.by ?? base.by ?? ['id'],
+    axis: operation?.axis ?? base.reorder?.axis ?? base.by ?? ['id'],
+  };
 }
 
 function mergeVerifyConfigs(base: ModelConfig, operation?: ModelConfig['verify']): ModelConfig['verify'] {

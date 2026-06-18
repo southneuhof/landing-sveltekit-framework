@@ -955,4 +955,92 @@ describe('createSectionFromSchema', () => {
       }),
     );
   });
+
+  it('seeds content rows with slot.editor.defaultValues restricted to declared slot fields', async () => {
+    const prisma = {
+      section: {
+        findFirst: vi.fn(async () => null),
+        create: vi.fn(async ({ data }) => ({ id: 'parent1', ...data })),
+      },
+      content: { create: vi.fn(async () => ({})) },
+      gallery: { create: vi.fn(async () => ({})) },
+      sectionGroup: { create: vi.fn(async () => ({})) },
+    };
+
+    await createSectionFromSchema({
+      prisma,
+      sectionSchemas: {
+        hero: {
+          code: 'hero',
+          data: {
+            content: {
+              type: 'content',
+              order: 1,
+              fields: ['title', 'url', 'url_text', 'url_color', 'url_icon'],
+              editor: {
+                defaultValues: {
+                  url_color: '#F70019FF',
+                  url_icon: 'ri-arrow-right-line',
+                  // Editor-only default not in `fields`; must be filtered out.
+                  _editorOnlyHint: 'Should Not Be Seeded',
+                },
+              },
+            },
+          },
+        },
+      },
+      sectionGroupId: 'sg1',
+      sectionTypeCode: 'hero',
+    });
+
+    expect(prisma.content.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          section_id: 'parent1',
+          order: 1,
+          url_color: '#F70019FF',
+          url_icon: 'ri-arrow-right-line',
+        }),
+      }),
+    );
+    const createdData = (prisma.content.create as any).mock.calls[0][0].data;
+    expect(createdData).not.toHaveProperty('_editorOnlyHint');
+    expect(createdData).not.toHaveProperty('title');
+  });
+
+  it('creates content rows without extra defaults when slot.editor.defaultValues is absent', async () => {
+    const prisma = {
+      section: {
+        findFirst: vi.fn(async () => null),
+        create: vi.fn(async ({ data }) => ({ id: 'parent1', ...data })),
+      },
+      content: { create: vi.fn(async () => ({})) },
+      gallery: { create: vi.fn(async () => ({})) },
+      sectionGroup: { create: vi.fn(async () => ({})) },
+    };
+
+    await createSectionFromSchema({
+      prisma,
+      sectionSchemas: {
+        hero: {
+          code: 'hero',
+          data: {
+            content: {
+              type: 'content',
+              order: 1,
+              fields: ['title', 'url'],
+            },
+          },
+        },
+      },
+      sectionGroupId: 'sg1',
+      sectionTypeCode: 'hero',
+    });
+
+    expect(prisma.content.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: { section_id: 'parent1', order: 1 },
+      }),
+    );
+  });
 });

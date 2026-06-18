@@ -138,6 +138,17 @@ export async function hydrateSectionsFromSchemas(sections, prisma, sectionSchema
         return normalizeSectionRecord(record, sectionSchemas);
     }));
 }
+// Resolves per-slot data defaults declared via `slot.editor.defaultValues`,
+// restricted to fields the slot actually loads (`slot.fields`). This seeds
+// content rows (e.g. button color/icon) on section creation; editor-only
+// defaults that aren't real content columns are ignored.
+function resolveSlotDataDefaults(slot) {
+    const declaredDefaults = slot.editor?.defaultValues;
+    if (!declaredDefaults) return {};
+    const allowedFields = slot.fields ? new Set(slot.fields) : null;
+    if (!allowedFields) return { ...declaredDefaults };
+    return Object.fromEntries(Object.entries(declaredDefaults).filter(([field]) => allowedFields.has(field)));
+}
 async function materializeSectionSchemaData({ prisma, parentSection, schemaData, }) {
     const slots = Object.values(schemaData).sort((a, b) => a.order - b.order);
     for (const slot of slots) {
@@ -145,10 +156,12 @@ async function materializeSectionSchemaData({ prisma, parentSection, schemaData,
             continue;
         }
         if (slot.type === 'content') {
+            const contentDefaults = resolveSlotDataDefaults(slot);
             await prisma.content.create({
                 data: {
                     order: slot.order,
                     section_id: parentSection.id,
+                    ...contentDefaults,
                 },
             });
             continue;
