@@ -1,5 +1,11 @@
 # @southneuhof/landing-sveltekit-framework
 
+## 0.0.7
+
+### Patch Changes
+
+- Automated patch release for changed framework packages.
+
 ## 0.0.6
 
 ### Patch Changes
