@@ -44,7 +44,7 @@ export function createFormTemplateHandler(config: {
 
 export function createFormSubmissionHandler(config: {
   findFormTypeWithFields: (formTypeId: string) => Promise<{ fields: FormSubmissionField[] } | null>;
-  saveSubmission: (payload: { form_type_id: string; data: Record<string, unknown> }) => Promise<unknown>;
+  saveSubmission: (payload: { form_type_id: string; data: Record<string, unknown>; job_id?: string }) => Promise<unknown>;
   requiredMessage: (field: FormSubmissionField) => string;
   invalidFormatMessage: (field: FormSubmissionField) => string;
   validateField?: (value: unknown, validationTypeCode: string) => boolean;
@@ -98,6 +98,7 @@ export function createFormSubmissionHandler(config: {
     const submission = await config.saveSubmission({
       form_type_id: body.form_type_id,
       data: submissionData,
+      job_id: typeof body.job_id === 'string' && body.job_id ? body.job_id : undefined,
     });
 
     return successData({ data: submission }, 201);
