@@ -1,0 +1,28 @@
+.landing-sveltekit-framework-observed {
+  opacity: 0;
+  transform: translateY(16px);
+  transition:
+    opacity 220ms ease,
+    transform 220ms ease;
+  transition-delay: var(--landing-sveltekit-framework-animation-delay, 0ms);
+}
+
+.landing-sveltekit-framework-observed.landing-sveltekit-framework-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.landing-sveltekit-framework-missing-section {
+  align-items: center;
+  background: #f3f4f6;
+  color: #111827;
+  display: flex;
+  min-height: 20vh;
+  justify-content: center;
+  width: 100%;
+}
+
+.landing-sveltekit-framework-missing-section p {
+  font-size: 1.5rem;
+  font-weight: 700;
+}
