@@ -235,4 +235,38 @@ describe('loadSectionResources', () => {
       articles: [{ id: 'a1', title: 'A' }],
     });
   });
+
+  it('caches resource resolvers by source and locale during one load', async () => {
+    const sections = [
+      { id: 's1', section_type_code: 'system-navbar', data: { menu: null } },
+      { id: 's2', section_type_code: 'system-navbar', data: { menu: null } },
+    ];
+    const schemas: SectionSchemaRegistry = {
+      'system-navbar': {
+        code: 'system-navbar',
+        data: {
+          menu: { type: 'resource', source: 'menu-tree', order: 1 },
+        },
+      },
+    };
+    const resolver = vi.fn(async () => ({ menu: [{ id: 'home' }] }));
+
+    const result = await loadSectionResources(
+      sections,
+      schemas,
+      { 'menu-tree': resolver },
+      {
+        prisma: {},
+        getLocale: () => 'en',
+        url: new URL('https://example.com'),
+        resourceCache: new Map(),
+      },
+    );
+
+    expect(resolver).toHaveBeenCalledTimes(1);
+    expect(result.map((section) => (section.data as any).menu)).toEqual([
+      { menu: [{ id: 'home' }] },
+      { menu: [{ id: 'home' }] },
+    ]);
+  });
 });

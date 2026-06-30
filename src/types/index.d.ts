@@ -124,6 +124,7 @@ export type SectionLoaderContext = {
     prisma: any;
     getLocale: () => string;
     url: URL;
+    resourceCache?: Map<string, unknown>;
 };
 export type SectionDataLoader<TSection extends LandingSection = LandingSection, TContext extends AnyRecord = SectionLoaderContext> = (section: TSection, context: TContext) => Promise<unknown>;
 export type SectionLoaderRegistry<TSection extends LandingSection = LandingSection, TContext extends AnyRecord = SectionLoaderContext> = Record<string, SectionDataLoader<TSection, TContext>>;

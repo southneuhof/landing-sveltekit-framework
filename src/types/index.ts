@@ -178,6 +178,7 @@ export type SectionLoaderContext = {
   prisma: any;
   getLocale: () => string;
   url: URL;
+  resourceCache?: Map<string, unknown>;
 };
 
 export type SectionDataLoader<

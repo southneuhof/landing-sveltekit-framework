@@ -80,22 +80,21 @@ export function createLandingPageLoad(config: LandingPageLoadConfig) {
       config.sectionSchemas ?? {},
     );
 
+    const context = {
+      prisma: config.prisma,
+      getLocale: config.getLocale,
+      url,
+      resourceCache: new Map<string, unknown>(),
+    };
+
     const resourceLoadedSections = await loadSectionResources(
       sections,
       config.sectionSchemas ?? {},
       config.sectionResourceResolvers ?? {},
-      {
-        prisma: config.prisma,
-        getLocale: config.getLocale,
-        url,
-      },
+      context,
     );
 
-    const loadedSections = await loadSectionData(resourceLoadedSections, config.sectionLoaders ?? {}, {
-      prisma: config.prisma,
-      getLocale: config.getLocale,
-      url,
-    });
+    const loadedSections = await loadSectionData(resourceLoadedSections, config.sectionLoaders ?? {}, context);
 
     return { sections: loadedSections };
   };

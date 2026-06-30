@@ -12,6 +12,14 @@ export async function loadSectionResources(
   resourceResolvers: SectionResourceResolverRegistry = {},
   context: SectionLoaderContext,
 ) {
+  async function resolveWithCache(key: string, resolve: () => Promise<unknown>) {
+    if (!context.resourceCache) return resolve();
+    if (!context.resourceCache.has(key)) {
+      context.resourceCache.set(key, resolve());
+    }
+    return await context.resourceCache.get(key);
+  }
+
   return Promise.all(
     sections.map(async (section) => {
       const sectionCode = section.section_type_code ?? '';
@@ -26,12 +34,14 @@ export async function loadSectionResources(
         if (!slot.source) continue;
         const resolver = resourceResolvers[slot.source];
         if (!resolver) continue;
-        nextData[slotKey] = await resolver({
-          section,
-          slotKey,
-          slot: slot as ResourceSlot,
-          context,
-        });
+        nextData[slotKey] = await resolveWithCache(`${slot.source}:${context.getLocale()}`, () =>
+          resolver({
+            section,
+            slotKey,
+            slot: slot as ResourceSlot,
+            context,
+          }),
+        );
         changed = true;
       }
 

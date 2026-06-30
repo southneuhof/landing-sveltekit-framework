@@ -48,16 +48,14 @@ export function createLandingPageLoad(config) {
         if (!pageSectionGroup)
             throw error(500, 'Section group not found');
         const sections = await hydrateSectionsFromSchemas(pageSectionGroup.sections, config.prisma, config.sectionSchemas ?? {});
-        const resourceLoadedSections = await loadSectionResources(sections, config.sectionSchemas ?? {}, config.sectionResourceResolvers ?? {}, {
+        const context = {
             prisma: config.prisma,
             getLocale: config.getLocale,
             url,
-        });
-        const loadedSections = await loadSectionData(resourceLoadedSections, config.sectionLoaders ?? {}, {
-            prisma: config.prisma,
-            getLocale: config.getLocale,
-            url,
-        });
+            resourceCache: new Map(),
+        };
+        const resourceLoadedSections = await loadSectionResources(sections, config.sectionSchemas ?? {}, config.sectionResourceResolvers ?? {}, context);
+        const loadedSections = await loadSectionData(resourceLoadedSections, config.sectionLoaders ?? {}, context);
         return { sections: loadedSections };
     };
 }
