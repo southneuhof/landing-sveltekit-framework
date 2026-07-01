@@ -1,6 +1,5 @@
 {
   "name": "@southneuhof/landing-sveltekit-framework",
-  "private": false,
   "version": "0.0.7",
   "type": "module",
   "description": "Reusable SvelteKit landing page engine for South Neuhof landing applications.",
@@ -8,75 +7,35 @@
     "type": "git",
     "url": "git+https://github.com/southneuhof/landing-sveltekit-framework.git"
   },
-  "main": "./dist/index.js",
-  "module": "./dist/index.js",
-  "types": "./dist/index.d.ts",
   "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
-    },
-    "./client": {
-      "types": "./dist/client/index.d.ts",
-      "import": "./dist/client/index.js"
-    },
+    ".": "./src/index.ts",
+    "./client": "./src/client/index.ts",
     "./server": {
-      "types": "./dist/server/index.d.ts",
-      "import": "./dist/server/index.js"
+      "types": "./src/server/index.d.ts",
+      "import": "./src/server/index.js"
     },
     "./server/schema": {
-      "types": "./dist/server/schema.d.ts",
-      "import": "./dist/server/schema.js"
+      "types": "./src/server/schema.d.ts",
+      "import": "./src/server/schema.js"
     },
     "./schema": {
-      "types": "./dist/schema/index.d.ts",
-      "import": "./dist/schema/index.js"
+      "types": "./src/schema/index.d.ts",
+      "import": "./src/schema/index.js"
     },
-    "./server/files": {
-      "types": "./dist/server/files.d.ts",
-      "import": "./dist/server/files.js"
-    },
-    "./api": {
-      "types": "./dist/api/index.d.ts",
-      "import": "./dist/api/index.js"
-    },
-    "./auth": {
-      "types": "./dist/auth/index.d.ts",
-      "import": "./dist/auth/index.js"
-    },
+    "./server/files": "./src/server/files.ts",
+    "./api": "./src/api/index.ts",
+    "./auth": "./src/auth/index.ts",
     "./types": {
-      "types": "./dist/types/index.d.ts",
-      "import": "./dist/types/index.js"
+      "types": "./src/types/index.d.ts",
+      "import": "./src/types/index.js"
     },
     "./components/*.svelte": {
-      "types": "./dist/components/*.svelte.d.ts",
-      "svelte": "./dist/components/*.svelte",
-      "import": "./dist/components/*.svelte"
+      "svelte": "./src/components/*.svelte",
+      "import": "./src/components/*.svelte"
     },
-    "./styles/*": "./dist/styles/*",
-    "./components/carousel": {
-      "types": "./dist/components/carousel/index.d.ts",
-      "import": "./dist/components/carousel/index.js"
-    },
-    "./components/tabs": {
-      "types": "./dist/components/tabs/index.d.ts",
-      "import": "./dist/components/tabs/index.js"
-    }
-  },
-  "files": [
-    "dist",
-    "src",
-    "!dist/**/*.tsbuildinfo",
-    "!dist/**/__tests__/**",
-    "!dist/**/*.spec.*",
-    "!dist/**/*.test.*",
-    "!src/**/__tests__/**",
-    "!src/**/*.spec.*",
-    "!src/**/*.test.*",
-    "README.md"
-  ],
-  "publishConfig": {
-    "registry": "https://npm.pkg.github.com"
+    "./styles/*": "./src/styles/*",
+    "./components/carousel": "./src/components/carousel/index.ts",
+    "./components/tabs": "./src/components/tabs/index.ts"
   },
   "peerDependencies": {
     "@sveltejs/kit": "^2.22.2",
@@ -90,7 +49,6 @@
     "@southneuhof/utilities": "workspace:^"
   },
   "devDependencies": {
-    "@sveltejs/package": "^2.4.0",
     "@sveltejs/vite-plugin-svelte": "^5.0.0",
     "@types/mime-types": "^2.1.4",
     "svelte": "^5.0.0",
@@ -99,10 +57,7 @@
     "vitest": "^2.1.9"
   },
   "scripts": {
-    "build": "pnpm clean && svelte-package && pnpm clean:build-info && pnpm clean:test-output",
-    "clean": "node ../../scripts/clean-package.mjs dist package",
-    "clean:build-info": "node ../../scripts/clean-package.mjs dist/tsconfig.tsbuildinfo",
-    "clean:test-output": "node ../../scripts/clean-built-test-output.mjs dist",
+    "build": "pnpm run type-check",
     "type-check": "svelte-check --tsconfig ./tsconfig.json",
     "test": "vitest run"
   }
