@@ -58,7 +58,7 @@
   },
   "scripts": {
     "build": "pnpm run type-check",
-    "type-check": "svelte-check --tsconfig ./tsconfig.json",
+    "type-check": "NODE_OPTIONS=--max-old-space-size=4096 svelte-check --tsconfig ./tsconfig.json",
     "test": "vitest run"
   }
 }
