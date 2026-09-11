@@ -328,7 +328,12 @@ export function createModelUpdateHandler(config: HandlerConfig) {
 
 
       await authorize(config, event, event.params.model, 'update', mergedConfig, body);
-      if (mergedConfig.validation) await validateFields(body, mergedConfig.validation);
+      if (mergedConfig.validation) {
+        const providedValidation = Object.fromEntries(
+          Object.entries(mergedConfig.validation).filter(([field]) => Object.prototype.hasOwnProperty.call(body, field)),
+        );
+        await validateFields(body, providedValidation);
+      }
 
       const customWhereObject = mergedConfig.where ? await mergedConfig.where(event) : undefined;
       const whereClause = {
@@ -515,7 +520,11 @@ function createSelect(delegate: any, config: ModelConfig) {
 
 function filterWritePayloadByFields(fields: string[] | undefined, body: AnyRecord): AnyRecord {
   if (!fields) return body;
-  return Object.fromEntries(fields.map((key) => [key, body[key]]));
+  return Object.fromEntries(
+    fields
+      .filter((key) => Object.prototype.hasOwnProperty.call(body, key))
+      .map((key) => [key, body[key]]),
+  );
 }
 
 function applyCustomFields(data: any, customFields?: Array<{ name: string; generator: (data: AnyRecord) => unknown }>) {

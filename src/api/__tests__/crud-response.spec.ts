@@ -576,6 +576,61 @@ describe('crud canonical response contract', () => {
     });
   });
 
+  it('allows partial updates and rejects null required values', async () => {
+    const prismaUpdate = vi.fn(async () => ({ id: 'a', active: false }));
+    const modelConfig = {
+      ...baseModelConfig,
+      create: {
+        allow: true,
+        fields: ['name', 'active'],
+        validation: {
+          name: [{
+            validator: (value: string) => typeof value === 'string' && value.length > 0,
+            message: 'Name is required',
+          }],
+        },
+      },
+      update: { allow: true, by: ['id'], fields: ['name', 'active'] },
+    };
+
+    const partialResponse = await createModelUpdateHandler(createConfig(
+      { article: { update: prismaUpdate } },
+      modelConfig,
+    ))({
+      request: new Request('http://localhost/api/article/update', {
+        method: 'PUT',
+        body: JSON.stringify({ id: 'a', active: false }),
+      }),
+      params: { model },
+      locals: createLocals(),
+    } as any);
+
+    expect(partialResponse.status).toBe(200);
+    expect(prismaUpdate).toHaveBeenCalledWith({
+      where: { id: 'a' },
+      data: { active: false },
+    });
+
+    const nullResponse = await createModelUpdateHandler(createConfig(
+      { article: { update: prismaUpdate } },
+      modelConfig,
+    ))({
+      request: new Request('http://localhost/api/article/update', {
+        method: 'PUT',
+        body: JSON.stringify({ id: 'a', name: null, active: false }),
+      }),
+      params: { model },
+      locals: createLocals(),
+    } as any);
+
+    expect(nullResponse.status).toBe(400);
+    await expect(nullResponse.json()).resolves.toEqual({
+      ok: false,
+      error: { message: 'Name is required' },
+    });
+    expect(prismaUpdate).toHaveBeenCalledTimes(1);
+  });
+
   it('create writes only whitelisted fields in default prisma path', async () => {
     const prismaCreate = vi.fn(async () => ({ id: 'a', title: 'A' }));
     const response = await createModelCreateHandler(createConfig(
